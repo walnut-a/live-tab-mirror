@@ -240,9 +240,13 @@ function PopupApp() {
             <input value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
 
-          <button type="button" onClick={requestOtp} disabled={busy || !isSupabaseConfigured()}>
+          <button
+            type="button"
+            onClick={requestOtp}
+            disabled={busy || otpSent || !isSupabaseConfigured()}
+          >
             <Send size={15} />
-            {otpSent ? '重新发送验证码' : '发送验证码'}
+            {otpSent ? '验证码已发送' : '发送验证码'}
           </button>
 
           {otpSent ? (
