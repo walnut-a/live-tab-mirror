@@ -15,18 +15,14 @@ describe('auth guards', () => {
     expect(isAllowedEmail('someone@example.com')).toBe(false);
   });
 
-  it('keeps the OTP input available before and after sending email', () => {
+  it('keeps manual OTP verification disabled until the code is long enough', () => {
     expect(
       getOtpLoginViewState({
         busy: false,
         configured: true,
-        otpSent: false,
         token: ''
       })
     ).toMatchObject({
-      showTokenInput: true,
-      sendButtonDisabled: false,
-      sendButtonLabel: '发送验证码',
       verifyButtonDisabled: true
     });
 
@@ -34,14 +30,20 @@ describe('auth guards', () => {
       getOtpLoginViewState({
         busy: false,
         configured: true,
-        otpSent: true,
         token: '123456'
       })
     ).toMatchObject({
-      showTokenInput: true,
-      sendButtonDisabled: true,
-      sendButtonLabel: '验证码已发送',
       verifyButtonDisabled: false
+    });
+
+    expect(
+      getOtpLoginViewState({
+        busy: false,
+        configured: false,
+        token: '123456'
+      })
+    ).toMatchObject({
+      verifyButtonDisabled: true
     });
   });
 });

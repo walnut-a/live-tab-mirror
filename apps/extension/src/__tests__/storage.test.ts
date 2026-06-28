@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readPendingOtp, writePendingOtp } from '../storage';
+import { clearSyncState, DEFAULT_SYNC_STATE, readSyncState, writeSyncState } from '../storage';
 
 type StoredItems = Record<string, unknown>;
 
@@ -35,7 +35,7 @@ function installChromeStorageMock() {
   });
 }
 
-describe('pending OTP state', () => {
+describe('extension sync state storage', () => {
   beforeEach(() => {
     for (const key of Object.keys(store)) {
       delete store[key];
@@ -43,19 +43,34 @@ describe('pending OTP state', () => {
     installChromeStorageMock();
   });
 
-  it('persists a pending OTP request so the popup can recover after closing', async () => {
-    await writePendingOtp('zhaowork74@gmail.com', new Date('2026-06-28T15:00:00.000Z'));
+  it('persists the latest sync summary for the popup', async () => {
+    await writeSyncState({
+      lastAttemptAt: '2026-06-29T03:40:00.000Z',
+      lastSyncAt: '2026-06-29T03:40:01.000Z',
+      lastError: null,
+      reason: 'manual',
+      tabCount: 42,
+      windowCount: 3
+    });
 
-    await expect(readPendingOtp(new Date('2026-06-28T15:05:00.000Z'))).resolves.toEqual({
-      email: 'zhaowork74@gmail.com',
-      requestedAt: '2026-06-28T15:00:00.000Z'
+    await expect(readSyncState()).resolves.toEqual({
+      lastAttemptAt: '2026-06-29T03:40:00.000Z',
+      lastSyncAt: '2026-06-29T03:40:01.000Z',
+      lastError: null,
+      reason: 'manual',
+      tabCount: 42,
+      windowCount: 3
     });
   });
 
-  it('drops stale pending OTP requests after the Supabase OTP expiry window', async () => {
-    await writePendingOtp('zhaowork74@gmail.com', new Date('2026-06-28T15:00:00.000Z'));
+  it('clears the sync summary on sign out', async () => {
+    await writeSyncState({
+      ...DEFAULT_SYNC_STATE,
+      lastError: '扩展还没有登录。',
+      reason: 'manual'
+    });
 
-    await expect(readPendingOtp(new Date('2026-06-28T16:01:00.000Z'))).resolves.toBeNull();
-    expect(store).not.toHaveProperty('live-tab-mirror:pending-otp');
+    await expect(clearSyncState()).resolves.toEqual(DEFAULT_SYNC_STATE);
+    await expect(readSyncState()).resolves.toEqual(DEFAULT_SYNC_STATE);
   });
 });

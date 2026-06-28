@@ -28,18 +28,11 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 
 3. 在 Authentication / Users 里确认 `zhaowork74@gmail.com` 已存在且邮箱已确认。当前线上项目里这个用户已经创建好了。
 4. 执行 `supabase/migrations/20260628142000_restrict_auth_users_to_allowed_email.sql`，限制 Auth 只能创建 `zhaowork74@gmail.com`。
-5. 扩展和手机网页都使用登录模式：`signInWithOtp({ shouldCreateUser: false })`，不会从客户端注册新用户。
-6. Email OTP 模板要包含 `{{ .Token }}`，这样扩展和手机网页都能输入验证码登录。
-   当前线上 Supabase 项目已把 Site URL 设为 GitHub Pages，并把 Magic Link 邮件模板改成显示 OTP 验证码，不再使用 `{{ .ConfirmationURL }}`。如果新建项目，需要在 Supabase Dashboard 的 Auth 邮件模板里按这个格式配置：
+5. 扩展和手机网页只负责 `verifyOtp({ type: 'email' })` 登录，不再从客户端发送邮件验证码。
+6. 每次登录前，在本机用 `npm run auth:code` 生成一次性验证码。这个脚本使用 Supabase Admin `generateLink`，不会触发 Supabase 邮件发送限流。
+7. 复制 Project URL 和 publishable key。不要使用 service_role key 或 secret key 构建前端。
 
-   ```html
-   <h2>Live Tab Mirror 登录验证码</h2>
-   <p>请输入这个验证码：{{ .Token }}</p>
-   ```
-
-7. 复制 Project URL 和 publishable key。不要使用 service_role key。
-
-注意：Supabase 内置邮件服务的发送额度很低，当前线上项目没有配置自有 SMTP 时，`rate_limit_email_sent` 只能是 2 封/小时，管理 API 也会拒绝直接调高。测试时不要反复点发送验证码；同一封 OTP 在当前项目里 1 小时内有效。扩展会在本地保存待输入验证码状态，pending 期间不会继续展示重发入口；扩展和网页的验证码输入框都会始终显示，已经收到邮件时可以直接输入。
+注意：service role key、secret key、Supabase access token 只能放在本机 shell 里给脚本用，不要写进 `apps/*/.env.local`、GitHub Actions 或任何前端代码。
 
 RLS 已限制：
 
@@ -80,6 +73,30 @@ VITE_DEVICE_ID=desktop-chrome-main
 VITE_DEVICE_NAME=Mac Chrome
 ```
 
+## 生成登录验证码
+
+推荐使用 Supabase access token，让脚本临时读取当前项目的服务端密钥：
+
+```bash
+export SUPABASE_ACCESS_TOKEN=your_supabase_access_token
+npm run auth:code
+```
+
+也可以直接使用服务端密钥：
+
+```bash
+export SUPABASE_SERVICE_ROLE_KEY=your_service_role_or_secret_key
+npm run auth:code
+```
+
+检查配置但不生成验证码：
+
+```bash
+npm run auth:code -- --check
+```
+
+脚本会输出 `zhaowork74@gmail.com` 的一次性验证码。打开扩展或手机网页，把这个验证码填进“验证码”输入框即可。验证码有效期以 Supabase Auth 当前配置为准。
+
 ## 加载 Chrome 扩展
 
 ```bash
@@ -98,7 +115,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。验证码输入框会一直显示；如果已经收到邮件，即使发送按钮因为 Supabase 邮件限流报错，也可以直接输入验证码登录。验证码请求成功后会在扩展本地保存一个待登录状态；即使关掉 popup，再打开也可以继续输入邮箱里的验证码。pending 期间按钮会显示“验证码已发送”，避免重复发信触发 Supabase 内置邮件限额。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。
+扩展 popup 里用 `zhaowork74@gmail.com` 和本机脚本生成的验证码登录，成功后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑，也不发送邮件。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。
 
 ## 运行手机网页/PWA
 
@@ -108,7 +125,7 @@ apps/extension/dist
 https://walnut-a.github.io/live-tab-mirror/
 ```
 
-网页登录同样只允许 `zhaowork74@gmail.com`。验证码输入框会一直显示；如果手里已有邮件验证码，不需要再次发送，直接输入后点登录即可。
+网页登录同样只允许 `zhaowork74@gmail.com`。先在本机运行 `npm run auth:code`，再把生成的验证码填进手机网页即可。
 
 手机上建议把网页安装成 PWA 使用：在 Android Chrome 打开上面的地址，点浏览器菜单里的“添加到主屏幕”或“安装应用”，之后从主屏幕图标打开。这样会按 `standalone` 模式运行，不再是普通 Chrome 标签页，也就不会在上下滑动时反复显示/隐藏 Chrome 工具栏。
 
@@ -142,6 +159,8 @@ npm run build -w @live-tab-mirror/mobile
 
 GitHub Pages 是公开入口；当前仓库也按低成本方案设为 public。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
 
+迁移出 Supabase 的方案见 [docs/MIGRATION_FROM_SUPABASE.md](docs/MIGRATION_FROM_SUPABASE.md)。当前推荐路线是先用本机脚本绕开邮件限流，后续再迁到 Cloudflare Workers + D1。
+
 GitHub Pages workflow：`.github/workflows/deploy-mobile.yml`。push 到 `main` 后会自动测试、类型检查、构建 `apps/mobile` 并发布到 Pages。
 
 GitHub repo settings 需要配置：
@@ -154,6 +173,7 @@ publishable key 会被前端打包，这是 Supabase 客户端的正常用法；
 ## 常用命令
 
 ```bash
+npm run auth:code -- --check
 npm test
 npm run typecheck
 npm run build

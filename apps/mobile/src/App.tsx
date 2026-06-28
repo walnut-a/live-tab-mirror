@@ -18,8 +18,7 @@ import {
   LogOut,
   Pin,
   RefreshCw,
-  Search,
-  Send
+  Search
 } from 'lucide-react';
 import { isSupabaseConfigured, mobileEnv } from './env';
 import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
@@ -99,9 +98,7 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState(ALLOWED_EMAIL);
   const [token, setToken] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
-  const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
@@ -119,7 +116,6 @@ export function App() {
   const otpLoginView = getOtpLoginViewState({
     busy: authBusy,
     configured: supabaseConfigured,
-    otpSent,
     token
   });
 
@@ -139,43 +135,19 @@ export function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function requestOtp() {
+  async function verifyOtp() {
     setAuthBusy(true);
     setAuthError(null);
-    setAuthMessage(null);
 
     const normalizedEmail = normalizeEmail(email);
-
     if (!isAllowedEmail(normalizedEmail)) {
       setAuthBusy(false);
       setAuthError('这里只有 zhaowork74@gmail.com 可以登录。');
       return;
     }
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false
-      }
-    });
-
-    setAuthBusy(false);
-
-    if (otpError) {
-      setAuthError(otpError.message);
-      return;
-    }
-
-    setOtpSent(true);
-    setAuthMessage('验证码已发送到邮箱。');
-  }
-
-  async function verifyOtp() {
-    setAuthBusy(true);
-    setAuthError(null);
-
     const { data, error: verifyError } = await supabase.auth.verifyOtp({
-      email: normalizeEmail(email),
+      email: normalizedEmail,
       token: token.trim(),
       type: 'email'
     });
@@ -188,14 +160,12 @@ export function App() {
     }
 
     setUser(data.user);
-    setAuthMessage(null);
     await refresh();
   }
 
   async function signOut() {
     await supabase.auth.signOut();
     setUser(null);
-    setOtpSent(false);
     setToken('');
     setQuery('');
   }
@@ -213,7 +183,7 @@ export function App() {
       <main className="login-screen">
         <section className="login-panel">
           <h1>Live Tabs</h1>
-          <p>输入邮箱验证码后查看电脑 Chrome 当前标签页。</p>
+          <p>输入本机脚本生成的验证码后查看电脑 Chrome 当前标签页。</p>
 
           {!supabaseConfigured ? (
             <div className="notice error">
@@ -227,29 +197,19 @@ export function App() {
             <input value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
 
-          <button type="button" onClick={requestOtp} disabled={otpLoginView.sendButtonDisabled}>
-            <Send size={17} />
-            {otpLoginView.sendButtonLabel}
+          <label>
+            验证码
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+            />
+          </label>
+          <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
+            登录
           </button>
 
-          {otpLoginView.showTokenInput ? (
-            <>
-              <label>
-                验证码
-                <input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
-                登录
-              </button>
-            </>
-          ) : null}
-
-          {authMessage ? <div className="notice success">{authMessage}</div> : null}
           {authError ? <div className="notice error">{authError}</div> : null}
         </section>
       </main>
