@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Live Tab Mirror",
+  "description": "Sync the current desktop Chrome tabs to your private Live Tab Mirror snapshot.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": ["https://*.supabase.co/*"],
+  "action": {
+    "default_title": "Live Tab Mirror",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

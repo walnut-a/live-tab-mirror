@@ -1,0 +1,23 @@
+{
+  "name": "@live-tab-mirror/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch --mode development",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@live-tab-mirror/shared": "0.1.0",
+    "@supabase/supabase-js": "2.108.2",
+    "lucide-react": "1.21.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.2.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3"
+  }
+}
