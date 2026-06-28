@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { getPublicAssetUrl } from './pwa';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -11,6 +12,6 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js');
+    void navigator.serviceWorker.register(getPublicAssetUrl('sw.js'));
   });
 }

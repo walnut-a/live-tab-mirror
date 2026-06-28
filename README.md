@@ -110,6 +110,8 @@ https://walnut-a.github.io/live-tab-mirror/
 
 网页登录同样只允许 `zhaowork74@gmail.com`。验证码输入框会一直显示；如果手里已有邮件验证码，不需要再次发送，直接输入后点登录即可。
 
+手机上建议把网页安装成 PWA 使用：在 Android Chrome 打开上面的地址，点浏览器菜单里的“添加到主屏幕”或“安装应用”，之后从主屏幕图标打开。这样会按 `standalone` 模式运行，不再是普通 Chrome 标签页，也就不会在上下滑动时反复显示/隐藏 Chrome 工具栏。
+
 代码仓库：
 
 ```text
@@ -134,7 +136,7 @@ http://192.168.1.10:5173
 npm run build -w @live-tab-mirror/mobile
 ```
 
-本项目当前使用 GitHub Pages 部署 `apps/mobile/dist`。PWA manifest 和最小 service worker 已在生产构建里输出。
+本项目当前使用 GitHub Pages 部署 `apps/mobile/dist`。PWA manifest 和最小 service worker 已在生产构建里输出；manifest 使用相对 `start_url`、`scope` 和 icon 路径，service worker 会按 Vite base path 注册到 `/live-tab-mirror/sw.js`。
 
 GitHub Pages 是公开入口；当前仓库也按低成本方案设为 public。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
 
