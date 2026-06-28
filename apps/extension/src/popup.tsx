@@ -78,7 +78,7 @@ function PopupApp() {
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: normalizedEmail,
       options: {
-        shouldCreateUser: true
+        shouldCreateUser: false
       }
     });
 

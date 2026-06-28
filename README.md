@@ -26,16 +26,25 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 
    这会创建 `public.desktop_tab_snapshots`，主键是 `(user_id, device_id)`，所以每次同步都会覆盖同一设备的最新快照，不保存历史。
 
-3. 执行 `supabase/migrations/20260628142000_restrict_auth_users_to_allowed_email.sql`，限制 Auth 只能创建 `zhaowork74@gmail.com`。
-4. Email OTP 模板要包含 `{{ .Token }}`，这样扩展和手机网页都能输入验证码登录。
-5. 复制 Project URL 和 publishable key。不要使用 service_role key。
+3. 在 Authentication / Users 里确认 `zhaowork74@gmail.com` 已存在且邮箱已确认。当前线上项目里这个用户已经创建好了。
+4. 执行 `supabase/migrations/20260628142000_restrict_auth_users_to_allowed_email.sql`，限制 Auth 只能创建 `zhaowork74@gmail.com`。
+5. 扩展和手机网页都使用登录模式：`signInWithOtp({ shouldCreateUser: false })`，不会从客户端注册新用户。
+6. Email OTP 模板要包含 `{{ .Token }}`，这样扩展和手机网页都能输入验证码登录。
+   如果邮件里仍然是可点击链接，或者点开跳到 `http://localhost:3000`，说明 Magic Link 模板还在用 `{{ .ConfirmationURL }}` 或项目 Site URL 还是默认本地地址。这个项目的第一版不依赖邮件链接，请在 Supabase Dashboard 的 Auth 邮件模板里改成显示六位 OTP，例如：
+
+   ```html
+   <h2>Live Tab Mirror 登录验证码</h2>
+   <p>请输入这个验证码：{{ .Token }}</p>
+   ```
+
+7. 复制 Project URL 和 publishable key。不要使用 service_role key。
 
 RLS 已限制：
 
 - 只能 `authenticated` 访问。
 - 只能访问自己的 `user_id`。
 - JWT email 必须是 `zhaowork74@gmail.com`。
-- Auth signup 触发器只允许 `zhaowork74@gmail.com` 创建用户。
+- Auth signup 触发器只允许 `zhaowork74@gmail.com` 创建用户；客户端默认不创建用户，只登录已存在的这个账号。
 
 当前 GitHub 账号里只有一个 `CoBridge` Supabase 项目。这个项目不建议复用给 Live Tab Mirror，避免把个人浏览标签页数据混进 CoBridge 生产后端。建议新建一个单独的 Supabase 项目后再执行本节配置。
 
@@ -87,7 +96,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
+扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
 
 ## 运行手机网页/PWA
 
