@@ -249,23 +249,19 @@ function PopupApp() {
             {otpSent ? '验证码已发送' : '发送验证码'}
           </button>
 
-          {otpSent ? (
-            <>
-              <label>
-                验证码
-                <input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={verifyOtp} disabled={busy || token.trim().length < 6}>
-                <CheckCircle2 size={15} />
-                登录并同步
-              </button>
-            </>
-          ) : null}
+          <label>
+            验证码
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+            />
+          </label>
+          <button type="button" onClick={verifyOtp} disabled={busy || token.trim().length < 6}>
+            <CheckCircle2 size={15} />
+            登录并同步
+          </button>
 
           {message ? <div className="notice success">{message}</div> : null}
           {error ? <div className="notice error">{error}</div> : null}

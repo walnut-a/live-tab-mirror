@@ -39,7 +39,7 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 
 7. 复制 Project URL 和 publishable key。不要使用 service_role key。
 
-注意：Supabase 内置邮件服务的发送额度很低，当前线上项目没有配置自有 SMTP 时，`rate_limit_email_sent` 只能是 2 封/小时，管理 API 也会拒绝直接调高。测试时不要反复点发送验证码；同一封 OTP 在当前项目里 1 小时内有效。扩展会在本地保存待输入验证码状态，pending 期间不会继续展示重发入口。
+注意：Supabase 内置邮件服务的发送额度很低，当前线上项目没有配置自有 SMTP 时，`rate_limit_email_sent` 只能是 2 封/小时，管理 API 也会拒绝直接调高。测试时不要反复点发送验证码；同一封 OTP 在当前项目里 1 小时内有效。扩展会在本地保存待输入验证码状态，pending 期间不会继续展示重发入口；验证码输入框始终显示，已经收到邮件时可以直接输入。
 
 RLS 已限制：
 
@@ -98,7 +98,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。验证码请求成功后会在扩展本地保存一个待登录状态；即使关掉 popup，再打开也可以继续输入邮箱里的验证码。pending 期间按钮会显示“验证码已发送”，避免重复发信触发 Supabase 内置邮件限额。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
+扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。验证码输入框会一直显示；如果已经收到邮件，即使发送按钮因为 Supabase 邮件限流报错，也可以直接输入验证码登录。验证码请求成功后会在扩展本地保存一个待登录状态；即使关掉 popup，再打开也可以继续输入邮箱里的验证码。pending 期间按钮会显示“验证码已发送”，避免重复发信触发 Supabase 内置邮件限额。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
 
 ## 运行手机网页/PWA
 
