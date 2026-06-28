@@ -30,7 +30,7 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 4. 执行 `supabase/migrations/20260628142000_restrict_auth_users_to_allowed_email.sql`，限制 Auth 只能创建 `zhaowork74@gmail.com`。
 5. 扩展和手机网页都使用登录模式：`signInWithOtp({ shouldCreateUser: false })`，不会从客户端注册新用户。
 6. Email OTP 模板要包含 `{{ .Token }}`，这样扩展和手机网页都能输入验证码登录。
-   当前线上 Supabase 项目已把 Site URL 设为 GitHub Pages，并把 Magic Link 邮件模板改成显示六位 OTP，不再使用 `{{ .ConfirmationURL }}`。如果新建项目，需要在 Supabase Dashboard 的 Auth 邮件模板里按这个格式配置：
+   当前线上 Supabase 项目已把 Site URL 设为 GitHub Pages，并把 Magic Link 邮件模板改成显示 OTP 验证码，不再使用 `{{ .ConfirmationURL }}`。如果新建项目，需要在 Supabase Dashboard 的 Auth 邮件模板里按这个格式配置：
 
    ```html
    <h2>Live Tab Mirror 登录验证码</h2>
