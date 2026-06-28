@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALLOWED_EMAIL } from '../constants';
-import { isAllowedEmail } from '../auth';
+import { getOtpLoginViewState, isAllowedEmail } from '../auth';
 import {
   createSnapshotFromWindows,
   filterSnapshot,
@@ -13,6 +13,36 @@ describe('auth guards', () => {
   it('allows only the configured personal email, ignoring case and whitespace', () => {
     expect(isAllowedEmail(`  ${ALLOWED_EMAIL.toUpperCase()}  `)).toBe(true);
     expect(isAllowedEmail('someone@example.com')).toBe(false);
+  });
+
+  it('keeps the OTP input available before and after sending email', () => {
+    expect(
+      getOtpLoginViewState({
+        busy: false,
+        configured: true,
+        otpSent: false,
+        token: ''
+      })
+    ).toMatchObject({
+      showTokenInput: true,
+      sendButtonDisabled: false,
+      sendButtonLabel: '发送验证码',
+      verifyButtonDisabled: true
+    });
+
+    expect(
+      getOtpLoginViewState({
+        busy: false,
+        configured: true,
+        otpSent: true,
+        token: '123456'
+      })
+    ).toMatchObject({
+      showTokenInput: true,
+      sendButtonDisabled: true,
+      sendButtonLabel: '验证码已发送',
+      verifyButtonDisabled: false
+    });
   });
 });
 

@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, LogOut, RefreshCw, Send } from 'lucide-react';
 import {
   ALLOWED_EMAIL,
   describeFreshness,
+  getOtpLoginViewState,
   isAllowedEmail,
   normalizeEmail
 } from '@live-tab-mirror/shared';
@@ -41,6 +42,13 @@ function PopupApp() {
     () => describeFreshness(syncState?.lastSyncAt ?? null),
     [syncState?.lastSyncAt]
   );
+  const supabaseConfigured = isSupabaseConfigured();
+  const otpLoginView = getOtpLoginViewState({
+    busy,
+    configured: supabaseConfigured,
+    otpSent,
+    token
+  });
 
   async function refreshStatus() {
     const response = await sendExtensionMessage('getStatus');
@@ -188,7 +196,7 @@ function PopupApp() {
         {busy ? <Loader2 className="spin" size={18} /> : <CheckCircle2 size={18} />}
       </header>
 
-      {!isSupabaseConfigured() ? (
+      {!supabaseConfigured ? (
         <section className="notice error">
           请先在扩展构建环境里配置 <code>VITE_SUPABASE_URL</code> 和{' '}
           <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>。
@@ -243,25 +251,29 @@ function PopupApp() {
           <button
             type="button"
             onClick={requestOtp}
-            disabled={busy || otpSent || !isSupabaseConfigured()}
+            disabled={otpLoginView.sendButtonDisabled}
           >
             <Send size={15} />
-            {otpSent ? '验证码已发送' : '发送验证码'}
+            {otpLoginView.sendButtonLabel}
           </button>
 
-          <label>
-            验证码
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-            />
-          </label>
-          <button type="button" onClick={verifyOtp} disabled={busy || token.trim().length < 6}>
-            <CheckCircle2 size={15} />
-            登录并同步
-          </button>
+          {otpLoginView.showTokenInput ? (
+            <>
+              <label>
+                验证码
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+              </label>
+              <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
+                <CheckCircle2 size={15} />
+                登录并同步
+              </button>
+            </>
+          ) : null}
 
           {message ? <div className="notice success">{message}</div> : null}
           {error ? <div className="notice error">{error}</div> : null}

@@ -39,7 +39,7 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 
 7. 复制 Project URL 和 publishable key。不要使用 service_role key。
 
-注意：Supabase 内置邮件服务的发送额度很低，当前线上项目没有配置自有 SMTP 时，`rate_limit_email_sent` 只能是 2 封/小时，管理 API 也会拒绝直接调高。测试时不要反复点发送验证码；同一封 OTP 在当前项目里 1 小时内有效。扩展会在本地保存待输入验证码状态，pending 期间不会继续展示重发入口；验证码输入框始终显示，已经收到邮件时可以直接输入。
+注意：Supabase 内置邮件服务的发送额度很低，当前线上项目没有配置自有 SMTP 时，`rate_limit_email_sent` 只能是 2 封/小时，管理 API 也会拒绝直接调高。测试时不要反复点发送验证码；同一封 OTP 在当前项目里 1 小时内有效。扩展会在本地保存待输入验证码状态，pending 期间不会继续展示重发入口；扩展和网页的验证码输入框都会始终显示，已经收到邮件时可以直接输入。
 
 RLS 已限制：
 
@@ -107,6 +107,8 @@ apps/extension/dist
 ```text
 https://walnut-a.github.io/live-tab-mirror/
 ```
+
+网页登录同样只允许 `zhaowork74@gmail.com`。验证码输入框会一直显示；如果手里已有邮件验证码，不需要再次发送，直接输入后点登录即可。
 
 代码仓库：
 

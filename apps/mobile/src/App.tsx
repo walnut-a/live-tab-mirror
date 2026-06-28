@@ -6,6 +6,7 @@ import {
   describeFreshness,
   filterSnapshot,
   getDomain,
+  getOtpLoginViewState,
   hasOpenableUrl,
   isAllowedEmail,
   normalizeEmail,
@@ -113,6 +114,13 @@ export function App() {
     () => describeFreshness(snapshot?.syncedAt ?? row?.synced_at ?? null),
     [row?.synced_at, snapshot?.syncedAt]
   );
+  const supabaseConfigured = isSupabaseConfigured();
+  const otpLoginView = getOtpLoginViewState({
+    busy: authBusy,
+    configured: supabaseConfigured,
+    otpSent,
+    token
+  });
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => {
@@ -206,7 +214,7 @@ export function App() {
           <h1>Live Tabs</h1>
           <p>输入邮箱验证码后查看电脑 Chrome 当前标签页。</p>
 
-          {!isSupabaseConfigured() ? (
+          {!supabaseConfigured ? (
             <div className="notice error">
               请先配置 <code>VITE_SUPABASE_URL</code> 和{' '}
               <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>。
@@ -218,12 +226,12 @@ export function App() {
             <input value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
 
-          <button type="button" onClick={requestOtp} disabled={authBusy || !isSupabaseConfigured()}>
+          <button type="button" onClick={requestOtp} disabled={otpLoginView.sendButtonDisabled}>
             <Send size={17} />
-            发送验证码
+            {otpLoginView.sendButtonLabel}
           </button>
 
-          {otpSent ? (
+          {otpLoginView.showTokenInput ? (
             <>
               <label>
                 验证码
@@ -234,7 +242,7 @@ export function App() {
                   onChange={(event) => setToken(event.target.value)}
                 />
               </label>
-              <button type="button" onClick={verifyOtp} disabled={authBusy || token.length < 6}>
+              <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
                 登录
               </button>
             </>
