@@ -26,7 +26,7 @@ supabase/migrations Supabase 表结构、RLS 和 grant
 
    这会创建 `public.desktop_tab_snapshots`，主键是 `(user_id, device_id)`，所以每次同步都会覆盖同一设备的最新快照，不保存历史。
 
-3. 在 Authentication 里预创建用户：`zhaowork74@gmail.com`。
+3. 执行 `supabase/migrations/20260628142000_restrict_auth_users_to_allowed_email.sql`，限制 Auth 只能创建 `zhaowork74@gmail.com`。
 4. Email OTP 模板要包含 `{{ .Token }}`，这样扩展和手机网页都能输入验证码登录。
 5. 复制 Project URL 和 publishable key。不要使用 service_role key。
 
@@ -35,6 +35,7 @@ RLS 已限制：
 - 只能 `authenticated` 访问。
 - 只能访问自己的 `user_id`。
 - JWT email 必须是 `zhaowork74@gmail.com`。
+- Auth signup 触发器只允许 `zhaowork74@gmail.com` 创建用户。
 
 当前 GitHub 账号里只有一个 `CoBridge` Supabase 项目。这个项目不建议复用给 Live Tab Mirror，避免把个人浏览标签页数据混进 CoBridge 生产后端。建议新建一个单独的 Supabase 项目后再执行本节配置。
 
