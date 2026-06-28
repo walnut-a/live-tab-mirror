@@ -18,7 +18,14 @@ export const DEFAULT_SYNC_STATE: ExtensionSyncState = {
   reason: null
 };
 
+export interface PendingOtpState {
+  email: string;
+  requestedAt: string;
+}
+
 const SYNC_STATE_KEY = 'live-tab-mirror:sync-state';
+const PENDING_OTP_KEY = 'live-tab-mirror:pending-otp';
+const PENDING_OTP_TTL_MS = 60 * 60 * 1000;
 
 function storageGet(keys: string | string[]): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -69,4 +76,55 @@ export async function writeSyncState(state: ExtensionSyncState): Promise<Extensi
 export async function clearSyncState(): Promise<ExtensionSyncState> {
   await storageRemove(SYNC_STATE_KEY);
   return DEFAULT_SYNC_STATE;
+}
+
+function parsePendingOtpState(value: unknown): PendingOtpState | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const pendingOtp = value as Partial<PendingOtpState>;
+  if (typeof pendingOtp.email !== 'string' || typeof pendingOtp.requestedAt !== 'string') {
+    return null;
+  }
+
+  return {
+    email: pendingOtp.email,
+    requestedAt: pendingOtp.requestedAt
+  };
+}
+
+function isPendingOtpFresh(pendingOtp: PendingOtpState, now: Date): boolean {
+  const requestedAt = Date.parse(pendingOtp.requestedAt);
+  return Number.isFinite(requestedAt) && now.getTime() - requestedAt <= PENDING_OTP_TTL_MS;
+}
+
+export async function readPendingOtp(now = new Date()): Promise<PendingOtpState | null> {
+  const result = await storageGet(PENDING_OTP_KEY);
+  const pendingOtp = parsePendingOtpState(result[PENDING_OTP_KEY]);
+
+  if (!pendingOtp) {
+    return null;
+  }
+
+  if (!isPendingOtpFresh(pendingOtp, now)) {
+    await storageRemove(PENDING_OTP_KEY);
+    return null;
+  }
+
+  return pendingOtp;
+}
+
+export async function writePendingOtp(email: string, requestedAt = new Date()): Promise<PendingOtpState> {
+  const pendingOtp = {
+    email,
+    requestedAt: requestedAt.toISOString()
+  };
+
+  await storageSet({ [PENDING_OTP_KEY]: pendingOtp });
+  return pendingOtp;
+}
+
+export async function clearPendingOtp(): Promise<void> {
+  await storageRemove(PENDING_OTP_KEY);
 }

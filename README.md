@@ -96,7 +96,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
+扩展 popup 里用 `zhaowork74@gmail.com` 发送验证码，输入 OTP 后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑。验证码请求成功后会在扩展本地保存一个待登录状态；即使关掉 popup，再打开也可以继续输入邮箱里的验证码。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每分钟 heartbeat 一次。
 
 ## 运行手机网页/PWA
 

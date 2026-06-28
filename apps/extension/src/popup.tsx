@@ -10,7 +10,12 @@ import {
 import type { User } from '@supabase/supabase-js';
 import { extensionEnv, isSupabaseConfigured } from './env';
 import { supabase } from './supabaseClient';
-import type { ExtensionSyncState } from './storage';
+import {
+  clearPendingOtp,
+  readPendingOtp,
+  writePendingOtp,
+  type ExtensionSyncState
+} from './storage';
 import './popup.css';
 
 interface MessageResponse {
@@ -43,7 +48,25 @@ function PopupApp() {
   }
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+
+      if (data.user) {
+        setOtpSent(false);
+        setToken('');
+        void clearPendingOtp();
+        return;
+      }
+
+      const pendingOtp = await readPendingOtp();
+      if (pendingOtp) {
+        setEmail(pendingOtp.email);
+        setOtpSent(true);
+        setMessage('可以继续输入邮箱里的验证码。');
+      }
+    })();
+
     void refreshStatus();
 
     const interval = window.setInterval(() => {
@@ -54,6 +77,12 @@ function PopupApp() {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        setOtpSent(false);
+        setToken('');
+        void clearPendingOtp();
+      }
     });
 
     return () => {
@@ -82,14 +111,16 @@ function PopupApp() {
       }
     });
 
-    setBusy(false);
-
     if (otpError) {
+      setBusy(false);
       setError(otpError.message);
       return;
     }
 
+    await writePendingOtp(normalizedEmail);
+    setEmail(normalizedEmail);
     setOtpSent(true);
+    setBusy(false);
     setMessage('验证码已发送到邮箱。');
   }
 
@@ -111,7 +142,10 @@ function PopupApp() {
       return;
     }
 
+    await clearPendingOtp();
     setUser(data.user);
+    setOtpSent(false);
+    setToken('');
     setMessage('登录成功，正在同步当前标签页。');
     const response = await sendExtensionMessage('syncNow');
     setSyncState(response.state);
@@ -140,6 +174,7 @@ function PopupApp() {
     setUser(null);
     setOtpSent(false);
     setToken('');
+    await clearPendingOtp();
     setBusy(false);
   }
 
@@ -207,7 +242,7 @@ function PopupApp() {
 
           <button type="button" onClick={requestOtp} disabled={busy || !isSupabaseConfigured()}>
             <Send size={15} />
-            发送验证码
+            {otpSent ? '重新发送验证码' : '发送验证码'}
           </button>
 
           {otpSent ? (
