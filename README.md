@@ -36,6 +36,8 @@ RLS 已限制：
 - 只能访问自己的 `user_id`。
 - JWT email 必须是 `zhaowork74@gmail.com`。
 
+当前 GitHub 账号里只有一个 `CoBridge` Supabase 项目。这个项目不建议复用给 Live Tab Mirror，避免把个人浏览标签页数据混进 CoBridge 生产后端。建议新建一个单独的 Supabase 项目后再执行本节配置。
+
 ## 安装依赖
 
 ```bash
@@ -88,6 +90,18 @@ apps/extension/dist
 
 ## 运行手机网页/PWA
 
+当前外网地址：
+
+```text
+https://walnut-a.github.io/live-tab-mirror/
+```
+
+代码仓库：
+
+```text
+https://github.com/walnut-a/live-tab-mirror
+```
+
 开发模式：
 
 ```bash
@@ -107,6 +121,15 @@ npm run build -w @live-tab-mirror/mobile
 ```
 
 部署 `apps/mobile/dist` 到 Vercel、Netlify、GitHub Pages 等静态站点即可。PWA manifest 和最小 service worker 已在生产构建里输出。
+
+本仓库已经配置 GitHub Pages workflow：`.github/workflows/deploy-mobile.yml`。push 到 `main` 后会自动测试、类型检查、构建 `apps/mobile` 并发布到 Pages。
+
+上线前需要在 GitHub repo settings 配置：
+
+- Repository variable: `VITE_SUPABASE_URL`
+- Repository secret: `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+配置后重新运行 `Deploy Mobile PWA` workflow，线上页面就会连接真实 Supabase 后端。publishable key 会被前端打包，这是 Supabase 客户端的正常用法；不要把 service role key 放进 GitHub Actions 或任何前端环境变量。
 
 ## 常用命令
 
