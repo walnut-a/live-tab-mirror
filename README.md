@@ -91,6 +91,12 @@ apps/extension/dist
 
 ## 运行手机网页/PWA
 
+当前外网地址：
+
+```text
+https://walnut-a.github.io/live-tab-mirror/
+```
+
 代码仓库：
 
 ```text
@@ -115,19 +121,18 @@ http://192.168.1.10:5173
 npm run build -w @live-tab-mirror/mobile
 ```
 
-部署 `apps/mobile/dist` 到 Cloudflare Pages 等静态站点即可。PWA manifest 和最小 service worker 已在生产构建里输出。
+本项目当前使用 GitHub Pages 部署 `apps/mobile/dist`。PWA manifest 和最小 service worker 已在生产构建里输出。
 
-不要把这个个人工具部署到公开 GitHub Pages。即使 Supabase RLS 是真正的数据边界，公开仓库和公开 Pages 也会暴露实现细节和后端 project ref，不适合作为个人私密工具的默认发布方式。
+GitHub Pages 是公开入口；仓库保持 private。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
 
-Cloudflare Pages 部署时配置：
+GitHub Pages workflow：`.github/workflows/deploy-mobile.yml`。push 到 `main` 后会自动测试、类型检查、构建 `apps/mobile` 并发布到 Pages。
 
-- Build command: `npm ci && npm run build -w @live-tab-mirror/mobile`
-- Build output directory: `apps/mobile/dist`
-- Environment variable: `VITE_SUPABASE_URL`
-- Environment variable: `VITE_SUPABASE_PUBLISHABLE_KEY`
-- Environment variable: `VITE_ALLOWED_EMAIL=zhaowork74@gmail.com`
+GitHub repo settings 需要配置：
 
-publishable key 会被前端打包，这是 Supabase 客户端的正常用法；不要把 service role key 放进 Cloudflare、GitHub Actions 或任何前端环境变量。
+- Repository variable: `VITE_SUPABASE_URL`
+- Repository secret: `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+publishable key 会被前端打包，这是 Supabase 客户端的正常用法；不要把 service role key 放进 GitHub Actions 或任何前端环境变量。
 
 ## 常用命令
 
