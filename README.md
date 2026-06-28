@@ -123,7 +123,7 @@ npm run build -w @live-tab-mirror/mobile
 
 本项目当前使用 GitHub Pages 部署 `apps/mobile/dist`。PWA manifest 和最小 service worker 已在生产构建里输出。
 
-GitHub Pages 是公开入口；仓库保持 private。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
+GitHub Pages 是公开入口；当前仓库也按低成本方案设为 public。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
 
 GitHub Pages workflow：`.github/workflows/deploy-mobile.yml`。push 到 `main` 后会自动测试、类型检查、构建 `apps/mobile` 并发布到 Pages。
 
