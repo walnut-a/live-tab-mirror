@@ -1,0 +1,1 @@
+export const SNAPSHOT_POLL_INTERVAL_MS = 30_000;

@@ -6,11 +6,14 @@ import {
 } from '@live-tab-mirror/shared';
 import { extensionEnv, isSupabaseConfigured } from './env';
 import { supabase } from './supabaseClient';
+import {
+  DEFAULT_DEBOUNCE_MS,
+  HEARTBEAT_PERIOD_MINUTES,
+  TITLE_DEBOUNCE_MS
+} from './syncPolicy';
 import { clearSyncState, readSyncState, writeSyncState, type ExtensionSyncState } from './storage';
 
 const HEARTBEAT_ALARM = 'live-tab-mirror-heartbeat';
-const DEFAULT_DEBOUNCE_MS = 1600;
-const TITLE_DEBOUNCE_MS = 2200;
 
 let pendingSync: ReturnType<typeof setTimeout> | null = null;
 let syncing = false;
@@ -132,7 +135,7 @@ function scheduleSync(reason: string, delayMs = DEFAULT_DEBOUNCE_MS): void {
 
 function ensureHeartbeat(): void {
   chrome.alarms.create(HEARTBEAT_ALARM, {
-    periodInMinutes: 1
+    periodInMinutes: HEARTBEAT_PERIOD_MINUTES
   });
 }
 

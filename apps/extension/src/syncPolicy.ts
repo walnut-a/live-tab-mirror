@@ -1,0 +1,3 @@
+export const DEFAULT_DEBOUNCE_MS = 1600;
+export const TITLE_DEBOUNCE_MS = 2200;
+export const HEARTBEAT_PERIOD_MINUTES = 10;

@@ -22,6 +22,7 @@ import {
   Send
 } from 'lucide-react';
 import { isSupabaseConfigured, mobileEnv } from './env';
+import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
 import { supabase } from './supabaseClient';
 
 interface SnapshotRow {
@@ -74,7 +75,7 @@ function useSnapshotPolling(user: User | null) {
       if (!document.hidden) {
         void refresh();
       }
-    }, 4000);
+    }, SNAPSHOT_POLL_INTERVAL_MS);
 
     const onVisibilityChange = () => {
       if (!document.hidden) {
@@ -272,35 +273,37 @@ export function App() {
         </div>
       </header>
 
-      <section className="meta-row">
-        <span>{row?.device_name ?? mobileEnv.allowedEmail}</span>
-        <span>{snapshot ? `${countTabs(snapshot)} 个标签页` : '等待同步'}</span>
+      <section className="app-content">
+        <section className="meta-row">
+          <span>{row?.device_name ?? mobileEnv.allowedEmail}</span>
+          <span>{snapshot ? `${countTabs(snapshot)} 个标签页` : '等待同步'}</span>
+        </section>
+
+        <label className="search-box">
+          <Search size={18} />
+          <input
+            value={query}
+            placeholder="搜索标题、URL 或域名"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        {error ? <div className="notice error">暂时无法刷新，已保留上次看到的列表。{error}</div> : null}
+
+        {!snapshot ? (
+          <section className="empty-state">
+            <h2>还没有收到桌面端同步</h2>
+            <p>请确认 Chrome 扩展已登录并运行。</p>
+          </section>
+        ) : filteredSnapshot && countTabs(filteredSnapshot) === 0 ? (
+          <section className="empty-state">
+            <h2>没有匹配结果</h2>
+            <p>换一个标题、URL 或域名试试。</p>
+          </section>
+        ) : (
+          <TabWindows snapshot={filteredSnapshot ?? snapshot} />
+        )}
       </section>
-
-      <label className="search-box">
-        <Search size={18} />
-        <input
-          value={query}
-          placeholder="搜索标题、URL 或域名"
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-
-      {error ? <div className="notice error">暂时无法刷新，已保留上次看到的列表。{error}</div> : null}
-
-      {!snapshot ? (
-        <section className="empty-state">
-          <h2>还没有收到桌面端同步</h2>
-          <p>请确认 Chrome 扩展已登录并运行。</p>
-        </section>
-      ) : filteredSnapshot && countTabs(filteredSnapshot) === 0 ? (
-        <section className="empty-state">
-          <h2>没有匹配结果</h2>
-          <p>换一个标题、URL 或域名试试。</p>
-        </section>
-      ) : (
-        <TabWindows snapshot={filteredSnapshot ?? snapshot} />
-      )}
     </main>
   );
 }
