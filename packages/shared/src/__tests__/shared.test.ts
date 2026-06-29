@@ -3,6 +3,7 @@ import { ALLOWED_EMAIL } from '../constants';
 import { getOtpLoginViewState, isAllowedEmail } from '../auth';
 import { isWorkerSessionFresh, normalizeBackendProvider } from '../backend';
 import {
+  createSnapshotHistoryHash,
   createSnapshotHash,
   createSnapshotFromWindows,
   filterSnapshot,
@@ -247,6 +248,124 @@ describe('snapshot shaping', () => {
     });
 
     await expect(createSnapshotHash(first)).resolves.toBe(await createSnapshotHash(second));
+  });
+
+  it('does not treat streaming title updates as historical changes', async () => {
+    const first = createSnapshotFromWindows(
+      [
+        {
+          id: 1,
+          focused: true,
+          incognito: false,
+          tabs: [
+            {
+              id: 1,
+              index: 0,
+              title: 'Agent 回复 于',
+              url: 'https://example.com/thread/1',
+              active: true,
+              pinned: false,
+              audible: false,
+              groupId: -1
+            }
+          ]
+        }
+      ],
+      {
+        deviceId: 'desktop-chrome-main',
+        deviceName: 'Mac Chrome',
+        browser: 'Chrome',
+        now: new Date('2026-06-28T11:24:32.000Z')
+      }
+    );
+    const second = createSnapshotFromWindows(
+      [
+        {
+          id: 1,
+          focused: true,
+          incognito: false,
+          tabs: [
+            {
+              id: 1,
+              index: 0,
+              title: 'Agent 回复 这张图',
+              url: 'https://example.com/thread/1',
+              active: true,
+              pinned: false,
+              audible: false,
+              groupId: -1
+            }
+          ]
+        }
+      ],
+      {
+        deviceId: 'desktop-chrome-main',
+        deviceName: 'Mac Chrome',
+        browser: 'Chrome',
+        now: new Date('2026-06-28T11:25:32.000Z')
+      }
+    );
+
+    await expect(createSnapshotHistoryHash(first)).resolves.toBe(await createSnapshotHistoryHash(second));
+  });
+
+  it('treats URL changes as historical changes', async () => {
+    const first = createSnapshotFromWindows(
+      [
+        {
+          id: 1,
+          focused: true,
+          incognito: false,
+          tabs: [
+            {
+              id: 1,
+              index: 0,
+              title: 'Example',
+              url: 'https://example.com/thread/1',
+              active: true,
+              pinned: false,
+              audible: false,
+              groupId: -1
+            }
+          ]
+        }
+      ],
+      {
+        deviceId: 'desktop-chrome-main',
+        deviceName: 'Mac Chrome',
+        browser: 'Chrome',
+        now: new Date('2026-06-28T11:24:32.000Z')
+      }
+    );
+    const second = createSnapshotFromWindows(
+      [
+        {
+          id: 1,
+          focused: true,
+          incognito: false,
+          tabs: [
+            {
+              id: 1,
+              index: 0,
+              title: 'Example',
+              url: 'https://example.com/thread/2',
+              active: true,
+              pinned: false,
+              audible: false,
+              groupId: -1
+            }
+          ]
+        }
+      ],
+      {
+        deviceId: 'desktop-chrome-main',
+        deviceName: 'Mac Chrome',
+        browser: 'Chrome',
+        now: new Date('2026-06-28T11:25:32.000Z')
+      }
+    );
+
+    await expect(createSnapshotHistoryHash(first)).resolves.not.toBe(await createSnapshotHistoryHash(second));
   });
 
   it('searches title, url, and domain without changing the original grouping order', () => {

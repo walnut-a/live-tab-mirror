@@ -11,7 +11,7 @@
 
 - GitHub Pages 继续放 PWA 静态资源。
 - Cloudflare Worker 提供登录、上传 snapshot、读取 snapshot 的 API。
-- D1 保存当前 snapshot、最近三天 snapshot 历史、一次性登录码和 session。
+- D1 保存当前 snapshot、最近 48 小时内用于合并展示的 snapshot 历史、一次性登录码和 session。
 - 不使用 Cloudflare KV 存 snapshot、验证码或 session。
 - 扩展和 PWA 不再接触 Supabase URL、publishable key，也不再依赖 Supabase Auth。
 
@@ -100,7 +100,7 @@ GET  /health
 
 ### D1 表结构
 
-保存当前状态，同时保留最近三天内的 snapshot 历史：
+保存当前状态，同时保留最近 48 小时内用于合并展示的 snapshot 历史：
 
 ```sql
 create table login_codes (
@@ -164,7 +164,7 @@ create table desktop_tab_snapshot_history (
 - `PUT /snapshot/:deviceId` 校验 snapshot schema version 和基本 payload 大小。
 - `PUT /snapshot/:deviceId` 比对 `snapshot_hash`，payload 没变化时直接返回，不写 D1。
 - 扩展端保留事件 debounce，并增加最小上传间隔，避免异常循环造成请求风暴。
-- 历史只保留最近三天，不做长期审计流水。
+- 历史只保留最近 48 小时，不做每次同步的时间线，也不做长期审计流水。
 - 不使用 KV。当前 snapshot、历史 snapshot、验证码和 session 都放 D1。
 
 ## 迁移步骤

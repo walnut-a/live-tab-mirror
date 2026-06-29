@@ -181,9 +181,32 @@ export async function createSnapshotHash(snapshot: TabSnapshot): Promise<string>
     device: snapshot.device,
     windows: snapshot.windows
   };
+
+  return hashObject(hashableSnapshot);
+}
+
+export async function createSnapshotHistoryHash(snapshot: TabSnapshot): Promise<string> {
+  const hashableSnapshot = {
+    schemaVersion: snapshot.schemaVersion,
+    device: snapshot.device,
+    windows: snapshot.windows.map((window) => ({
+      windowId: window.windowId,
+      tabs: window.tabs.map((tab) => ({
+        index: tab.index,
+        url: tab.url,
+        pinned: tab.pinned,
+        groupId: tab.groupId
+      }))
+    }))
+  };
+
+  return hashObject(hashableSnapshot);
+}
+
+async function hashObject(value: unknown): Promise<string> {
   const digest = await crypto.subtle.digest(
     'SHA-256',
-    new TextEncoder().encode(JSON.stringify(hashableSnapshot))
+    new TextEncoder().encode(JSON.stringify(value))
   );
 
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');

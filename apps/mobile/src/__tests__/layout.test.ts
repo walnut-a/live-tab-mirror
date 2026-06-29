@@ -20,16 +20,16 @@ describe('mobile shell behavior', () => {
     expect(css).toMatch(/\.app-content\s*{[\s\S]*overflow-y:\s*auto/);
   });
 
-  it('renders recent snapshot history without expanding the page width', () => {
+  it('renders merged recent history instead of per-sync history chips', () => {
     const appPath = resolve(import.meta.dirname, '../App.tsx');
     const stylesPath = resolve(import.meta.dirname, '../styles.css');
     const appSource = readFileSync(appPath, 'utf8');
     const css = readFileSync(stylesPath, 'utf8');
 
-    expect(appSource).toContain('aria-label="历史快照"');
-    expect(appSource).toContain('最近三天');
-    expect(css).toMatch(/\.history-list\s*{[\s\S]*overflow-x:\s*auto/);
-    expect(css).toMatch(/\.history-chip\s*{[\s\S]*flex:\s*0 0 auto/);
+    expect(appSource).toContain('aria-label="最近 48 小时历史"');
+    expect(appSource).toContain('最近 48 小时');
+    expect(appSource).not.toContain('history-chip');
+    expect(css).toMatch(/\.history-section\s*{[\s\S]*display:\s*grid/);
   });
 
   it('renders a compact device filter for multiple desktop browsers', () => {

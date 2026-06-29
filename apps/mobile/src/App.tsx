@@ -11,7 +11,6 @@ import {
   isAllowedEmail,
   normalizeEmail,
   type SnapshotDeviceRecord,
-  type SnapshotHistoryRecord,
   type SnapshotRecord,
   type TabSnapshot
 } from '@live-tab-mirror/shared';
@@ -35,8 +34,6 @@ import {
   signOutWorker,
   verifyWorkerCode
 } from './workerBackend';
-
-const HISTORY_FETCH_LIMIT = 120;
 
 async function fetchLatestSnapshot(deviceId?: string | null): Promise<SnapshotRecord | null> {
   if (mobileEnv.backendProvider === 'worker') {
@@ -62,13 +59,13 @@ async function fetchLatestSnapshot(deviceId?: string | null): Promise<SnapshotRe
   return (data as SnapshotRecord | null) ?? null;
 }
 
-async function fetchSnapshotHistory(deviceId?: string | null): Promise<SnapshotHistoryRecord[]> {
+async function fetchSnapshotHistory(deviceId?: string | null): Promise<SnapshotRecord | null> {
   if (mobileEnv.backendProvider !== 'worker') {
-    return [];
+    return null;
   }
 
-  const data = await fetchWorkerSnapshotHistory(HISTORY_FETCH_LIMIT, deviceId);
-  return data.snapshots;
+  const data = await fetchWorkerSnapshotHistory(deviceId);
+  return data.snapshot;
 }
 
 async function fetchSnapshotDevices(): Promise<SnapshotDeviceRecord[]> {
@@ -99,7 +96,7 @@ function formatSnapshotTime(value?: string): string {
 
 function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string | null) {
   const [row, setRow] = useState<SnapshotRecord | null>(null);
-  const [historyRows, setHistoryRows] = useState<SnapshotHistoryRecord[]>([]);
+  const [historyRow, setHistoryRow] = useState<SnapshotRecord | null>(null);
   const [devices, setDevices] = useState<SnapshotDeviceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +117,7 @@ function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string |
       const history = await fetchSnapshotHistory(historyDeviceId);
       setError(null);
       setRow(data);
-      setHistoryRows(history);
+      setHistoryRow(history);
       setDevices(nextDevices);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : '刷新失败。');
@@ -132,7 +129,7 @@ function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string |
   useEffect(() => {
     if (!user) {
       setRow(null);
-      setHistoryRows([]);
+      setHistoryRow(null);
       setDevices([]);
       setError(null);
       return;
@@ -160,7 +157,7 @@ function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string |
     };
   }, [refresh, user]);
 
-  return { row, historyRows, devices, loading, error, refresh };
+  return { row, historyRow, devices, loading, error, refresh };
 }
 
 export function App() {
@@ -172,27 +169,18 @@ export function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
-  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
-  const { row, historyRows, devices, loading, error, refresh } = useSnapshotPolling(user, selectedDeviceId);
-  const visibleHistoryRows = useMemo(
-    () =>
-      historyRows.filter(
-        (historyRow) =>
-          historyRow.updated_at !== row?.updated_at ||
-          historyRow.snapshot_hash !== row?.snapshot_hash
-      ),
-    [historyRows, row?.snapshot_hash, row?.updated_at]
-  );
-  const selectedHistoryRow = useMemo(
-    () => historyRows.find((historyRow) => historyRow.id === selectedHistoryId) ?? null,
-    [historyRows, selectedHistoryId]
-  );
-  const activeRow = selectedHistoryId ? selectedHistoryRow ?? row : row;
+  const { row, historyRow, devices, loading, error, refresh } = useSnapshotPolling(user, selectedDeviceId);
+  const activeRow = row;
   const snapshot = activeRow?.snapshot ?? null;
   const filteredSnapshot = useMemo(
     () => (snapshot ? filterSnapshot(snapshot, query) : null),
     [query, snapshot]
+  );
+  const historySnapshot = historyRow?.snapshot ?? null;
+  const filteredHistorySnapshot = useMemo(
+    () => (historySnapshot ? filterSnapshot(historySnapshot, query) : null),
+    [historySnapshot, query]
   );
   const freshness = useMemo(
     () => describeFreshness(snapshot?.syncedAt ?? activeRow?.synced_at ?? null),
@@ -228,15 +216,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedHistoryId && !historyRows.some((historyRow) => historyRow.id === selectedHistoryId)) {
-      setSelectedHistoryId(null);
-    }
-  }, [historyRows, selectedHistoryId]);
-
-  useEffect(() => {
     if (selectedDeviceId && devices.length > 0 && !devices.some((device) => device.device_id === selectedDeviceId)) {
       setSelectedDeviceId(null);
-      setSelectedHistoryId(null);
     }
   }, [devices, selectedDeviceId]);
 
@@ -288,7 +269,6 @@ export function App() {
     setToken('');
     setQuery('');
     setSelectedDeviceId(null);
-    setSelectedHistoryId(null);
   }
 
   if (authLoading) {
@@ -365,17 +345,7 @@ export function App() {
             selectedDeviceId={selectedDeviceId}
             onSelect={(deviceId) => {
               setSelectedDeviceId(deviceId);
-              setSelectedHistoryId(null);
             }}
-          />
-        ) : null}
-
-        {row && visibleHistoryRows.length > 0 ? (
-          <SnapshotTimeline
-            latest={row}
-            rows={visibleHistoryRows}
-            selectedId={selectedHistoryId}
-            onSelect={setSelectedHistoryId}
           />
         ) : null}
 
@@ -403,6 +373,10 @@ export function App() {
         ) : (
           <TabWindows snapshot={filteredSnapshot ?? snapshot} />
         )}
+
+        {historySnapshot && filteredHistorySnapshot && countTabs(filteredHistorySnapshot) > 0 ? (
+          <HistorySection snapshot={filteredHistorySnapshot} />
+        ) : null}
       </section>
     </main>
   );
@@ -447,63 +421,33 @@ function DeviceFilter({
   );
 }
 
-function SnapshotTimeline({
-  latest,
-  rows,
-  selectedId,
-  onSelect
-}: {
-  latest: SnapshotRecord;
-  rows: SnapshotHistoryRecord[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-}) {
+function HistorySection({ snapshot }: { snapshot: TabSnapshot }) {
   return (
-    <section className="history-strip" aria-label="历史快照">
-      <div className="history-heading">
+    <section className="history-section" aria-label="最近 48 小时历史">
+      <header className="history-heading">
         <History size={16} />
-        <span>最近三天</span>
-      </div>
-      <div className="history-list">
-        <button
-          type="button"
-          className={`history-chip ${selectedId === null ? 'active' : ''}`}
-          aria-pressed={selectedId === null}
-          onClick={() => onSelect(null)}
-        >
-          <span>最新</span>
-          <small>{formatSnapshotTime(latest.updated_at)}</small>
-        </button>
-
-        {rows.map((historyRow) => (
-          <button
-            type="button"
-            className={`history-chip ${selectedId === historyRow.id ? 'active' : ''}`}
-            aria-pressed={selectedId === historyRow.id}
-            key={historyRow.id}
-            onClick={() => onSelect(historyRow.id)}
-          >
-            <span>{formatSnapshotTime(historyRow.updated_at)}</span>
-            <small>{countTabs(historyRow.snapshot)} 个</small>
-          </button>
-        ))}
-      </div>
+        <span>最近 48 小时</span>
+        <small>{countTabs(snapshot)} 个历史链接</small>
+      </header>
+      <TabWindows snapshot={snapshot} compact />
     </section>
   );
 }
 
-function TabWindows({ snapshot }: { snapshot: TabSnapshot }) {
+function TabWindows({ snapshot, compact = false }: { snapshot: TabSnapshot; compact?: boolean }) {
   return (
     <section className="windows">
       {snapshot.windows.map((window, index) => (
         <section className="window-group" key={`${window.windowId ?? index}-${index}`}>
-          <header className="window-header">
-            <h2>Window {index + 1}</h2>
-            <span>
-              {window.focused ? 'Current on desktop · ' : ''}
-              {window.tabs.length} tabs
-            </span>
-          </header>
+          {!compact ? (
+            <header className="window-header">
+              <h2>Window {index + 1}</h2>
+              <span>
+                {window.focused ? 'Current on desktop · ' : ''}
+                {window.tabs.length} tabs
+              </span>
+            </header>
+          ) : null}
 
           <div className="tab-list">
             {window.tabs.map((tab) => (

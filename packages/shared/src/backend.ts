@@ -20,8 +20,8 @@ export interface SnapshotHistoryRecord extends SnapshotRecord {
 }
 
 export interface SnapshotHistoryResponse {
-  retentionDays: number;
-  snapshots: SnapshotHistoryRecord[];
+  retentionHours: number;
+  snapshot: SnapshotRecord | null;
 }
 
 export interface SnapshotDeviceRecord {

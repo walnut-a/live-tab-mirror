@@ -8,7 +8,7 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   LOGIN_CODE_TTL_MINUTES?: string;
   SESSION_TTL_DAYS?: string;
-  SNAPSHOT_HISTORY_RETENTION_DAYS?: string;
+  SNAPSHOT_HISTORY_RETENTION_HOURS?: string;
 }
 
 export interface LoginCodeRow {

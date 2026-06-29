@@ -114,14 +114,15 @@ export async function fetchLatestWorkerSnapshot(deviceId?: string | null): Promi
 }
 
 export async function fetchWorkerSnapshotHistory(
-  limit = 120,
   deviceId?: string | null
 ): Promise<SnapshotHistoryResponse> {
-  const params = new URLSearchParams({ limit: String(limit) });
+  const params = new URLSearchParams();
   if (deviceId) {
     params.set('device_id', deviceId);
   }
-  return workerFetch<SnapshotHistoryResponse>(`/snapshots/history?${params.toString()}`);
+
+  const query = params.toString();
+  return workerFetch<SnapshotHistoryResponse>(query ? `/snapshots/history?${query}` : '/snapshots/history');
 }
 
 export async function fetchWorkerDevices(): Promise<SnapshotDeviceRecord[]> {
