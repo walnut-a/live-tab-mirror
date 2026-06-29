@@ -183,6 +183,60 @@ input:focus {
   margin-bottom: 14px;
 }
 
+.device-strip {
+  margin-bottom: 14px;
+}
+
+.device-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.device-list::-webkit-scrollbar {
+  display: none;
+}
+
+.device-chip {
+  flex: 0 0 auto;
+  min-width: 112px;
+  max-width: 190px;
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid #cbd6cd;
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #ffffff;
+  color: #29372f;
+  font-weight: 650;
+  text-align: left;
+}
+
+.device-chip.active {
+  border-color: #2f7d58;
+  background: #e7f5ec;
+  color: #155f3a;
+}
+
+.device-chip span,
+.device-chip small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-chip small {
+  color: #68756d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .history-heading {
   display: inline-flex;
   align-items: center;

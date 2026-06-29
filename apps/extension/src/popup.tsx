@@ -11,7 +11,12 @@ import {
 } from '@live-tab-mirror/shared';
 import { extensionEnv, isBackendConfigured } from './env';
 import { supabase } from './supabaseClient';
-import { type ExtensionSyncState } from './storage';
+import {
+  type ExtensionDeviceConfig,
+  type ExtensionSyncState,
+  readDeviceConfig,
+  writeDeviceConfig
+} from './storage';
 import { getWorkerUser, signOutWorker, verifyWorkerCode } from './workerClient';
 import './popup.css';
 
@@ -29,6 +34,8 @@ function PopupApp() {
   const [token, setToken] = useState('');
   const [user, setUser] = useState<BackendUser | null>(null);
   const [syncState, setSyncState] = useState<ExtensionSyncState | null>(null);
+  const [deviceConfig, setDeviceConfig] = useState<ExtensionDeviceConfig | null>(null);
+  const [deviceNameDraft, setDeviceNameDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +58,13 @@ function PopupApp() {
 
   useEffect(() => {
     void (async () => {
+      const nextDeviceConfig = await readDeviceConfig({
+        deviceId: extensionEnv.deviceId,
+        deviceName: extensionEnv.deviceName
+      });
+      setDeviceConfig(nextDeviceConfig);
+      setDeviceNameDraft(nextDeviceConfig.deviceName);
+
       if (extensionEnv.backendProvider === 'worker') {
         setUser(await getWorkerUser());
         return;
@@ -134,6 +148,20 @@ function PopupApp() {
     }
   }
 
+  async function saveDeviceName() {
+    if (!deviceConfig) {
+      return;
+    }
+
+    const nextConfig = await writeDeviceConfig({
+      ...deviceConfig,
+      deviceName: deviceNameDraft
+    });
+    setDeviceConfig(nextConfig);
+    setDeviceNameDraft(nextConfig.deviceName);
+    setMessage('设备名称已保存。');
+  }
+
   async function signOut() {
     setBusy(true);
     if (extensionEnv.backendProvider === 'worker') {
@@ -188,9 +216,32 @@ function PopupApp() {
             </div>
             <div>
               <dt>设备</dt>
-              <dd>{extensionEnv.deviceName}</dd>
+              <dd>{deviceConfig?.deviceName ?? extensionEnv.deviceName}</dd>
             </div>
           </dl>
+
+          <section className="device-settings">
+            <label>
+              设备名称
+              <input
+                value={deviceNameDraft}
+                onChange={(event) => setDeviceNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void saveDeviceName();
+                  }
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={saveDeviceName}
+              disabled={busy || !deviceConfig}
+            >
+              保存名称
+            </button>
+          </section>
 
           <div className="actions">
             <button type="button" onClick={syncManually} disabled={busy}>

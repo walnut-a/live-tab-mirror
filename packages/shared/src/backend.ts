@@ -24,6 +24,13 @@ export interface SnapshotHistoryResponse {
   snapshots: SnapshotHistoryRecord[];
 }
 
+export interface SnapshotDeviceRecord {
+  device_id: string;
+  device_name: string;
+  synced_at: string;
+  updated_at: string;
+}
+
 export interface WorkerSession {
   email: string;
   token: string;

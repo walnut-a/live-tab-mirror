@@ -4,6 +4,7 @@ import {
   isTabSnapshot,
   normalizeEmail
 } from '@live-tab-mirror/shared';
+import { readSnapshotDeviceFilter } from './devices';
 import { errorResponse, jsonResponse, optionsResponse, readJson } from './http';
 import {
   cleanupSnapshotHistory,
@@ -28,6 +29,7 @@ import type {
   Env,
   LoginCodeRow,
   SessionRow,
+  SnapshotDeviceRow,
   SnapshotHistoryRow,
   SnapshotRow,
   SnapshotUpsertBody
@@ -159,29 +161,60 @@ async function logout(request: Request, env: Env): Promise<Response> {
 
 async function latestSnapshot(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  const row = await env.DB.prepare(
-    `select email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
-     from desktop_tab_snapshots
-     where email = ?1
-     order by updated_at desc
-     limit 1`
-  ).bind(session.email).first<SnapshotRow>();
+  const url = new URL(request.url);
+  const deviceId = readSnapshotDeviceFilter(url.searchParams.get('device_id'));
+  const row = deviceId
+    ? await env.DB.prepare(
+        `select email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+         from desktop_tab_snapshots
+         where email = ?1 and device_id = ?2
+         order by updated_at desc
+         limit 1`
+      ).bind(session.email, deviceId).first<SnapshotRow>()
+    : await env.DB.prepare(
+        `select email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+         from desktop_tab_snapshots
+         where email = ?1
+         order by updated_at desc
+         limit 1`
+      ).bind(session.email).first<SnapshotRow>();
 
   return jsonResponse(request, env, row ? snapshotRowToBody(row) : null);
+}
+
+async function snapshotDevices(request: Request, env: Env): Promise<Response> {
+  const session = await requireSession(request, env);
+  const rows = await env.DB.prepare(
+    `select device_id, device_name, synced_at, updated_at
+     from desktop_tab_snapshots
+     where email = ?1
+     order by updated_at desc`
+  ).bind(session.email).all<SnapshotDeviceRow>();
+
+  return jsonResponse(request, env, rows.results);
 }
 
 async function snapshotHistory(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const url = new URL(request.url);
   const limit = readSnapshotHistoryLimit(url.searchParams.get('limit'));
+  const deviceId = readSnapshotDeviceFilter(url.searchParams.get('device_id'));
   const cutoff = getSnapshotHistoryCutoffIso(env);
-  const rows = await env.DB.prepare(
-    `select id, email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
-     from desktop_tab_snapshot_history
-     where email = ?1 and updated_at >= ?2
-     order by updated_at desc
-     limit ?3`
-  ).bind(session.email, cutoff, limit).all<SnapshotHistoryRow>();
+  const rows = deviceId
+    ? await env.DB.prepare(
+        `select id, email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+         from desktop_tab_snapshot_history
+         where email = ?1 and updated_at >= ?2 and device_id = ?3
+         order by updated_at desc
+         limit ?4`
+      ).bind(session.email, cutoff, deviceId, limit).all<SnapshotHistoryRow>()
+    : await env.DB.prepare(
+        `select id, email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+         from desktop_tab_snapshot_history
+         where email = ?1 and updated_at >= ?2
+         order by updated_at desc
+         limit ?3`
+      ).bind(session.email, cutoff, limit).all<SnapshotHistoryRow>();
 
   return jsonResponse(request, env, {
     retentionDays: readSnapshotHistoryRetentionDays(env),
@@ -300,6 +333,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   if (request.method === 'GET' && url.pathname === '/snapshot/latest') {
     return latestSnapshot(request, env);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/devices') {
+    return snapshotDevices(request, env);
   }
 
   if (request.method === 'GET' && url.pathname === '/snapshots/history') {

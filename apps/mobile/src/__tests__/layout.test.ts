@@ -31,4 +31,16 @@ describe('mobile shell behavior', () => {
     expect(css).toMatch(/\.history-list\s*{[\s\S]*overflow-x:\s*auto/);
     expect(css).toMatch(/\.history-chip\s*{[\s\S]*flex:\s*0 0 auto/);
   });
+
+  it('renders a compact device filter for multiple desktop browsers', () => {
+    const appPath = resolve(import.meta.dirname, '../App.tsx');
+    const stylesPath = resolve(import.meta.dirname, '../styles.css');
+    const appSource = readFileSync(appPath, 'utf8');
+    const css = readFileSync(stylesPath, 'utf8');
+
+    expect(appSource).toContain('aria-label="设备筛选"');
+    expect(appSource).toContain('最近同步');
+    expect(css).toMatch(/\.device-list\s*{[\s\S]*overflow-x:\s*auto/);
+    expect(css).toMatch(/\.device-chip\s*{[\s\S]*flex:\s*0 0 auto/);
+  });
 });

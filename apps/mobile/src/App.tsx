@@ -10,6 +10,7 @@ import {
   hasOpenableUrl,
   isAllowedEmail,
   normalizeEmail,
+  type SnapshotDeviceRecord,
   type SnapshotHistoryRecord,
   type SnapshotRecord,
   type TabSnapshot
@@ -27,6 +28,7 @@ import { isBackendConfigured, mobileEnv } from './env';
 import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
 import { supabase } from './supabaseClient';
 import {
+  fetchWorkerDevices,
   fetchLatestWorkerSnapshot,
   fetchWorkerSnapshotHistory,
   getWorkerUser,
@@ -36,17 +38,22 @@ import {
 
 const HISTORY_FETCH_LIMIT = 120;
 
-async function fetchLatestSnapshot(): Promise<SnapshotRecord | null> {
+async function fetchLatestSnapshot(deviceId?: string | null): Promise<SnapshotRecord | null> {
   if (mobileEnv.backendProvider === 'worker') {
-    return fetchLatestWorkerSnapshot();
+    return fetchLatestWorkerSnapshot(deviceId);
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('desktop_tab_snapshots')
     .select('device_id,device_name,snapshot,synced_at,updated_at')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (deviceId) {
+    query = query.eq('device_id', deviceId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     throw error;
@@ -55,13 +62,21 @@ async function fetchLatestSnapshot(): Promise<SnapshotRecord | null> {
   return (data as SnapshotRecord | null) ?? null;
 }
 
-async function fetchSnapshotHistory(): Promise<SnapshotHistoryRecord[]> {
+async function fetchSnapshotHistory(deviceId?: string | null): Promise<SnapshotHistoryRecord[]> {
   if (mobileEnv.backendProvider !== 'worker') {
     return [];
   }
 
-  const data = await fetchWorkerSnapshotHistory(HISTORY_FETCH_LIMIT);
+  const data = await fetchWorkerSnapshotHistory(HISTORY_FETCH_LIMIT, deviceId);
   return data.snapshots;
+}
+
+async function fetchSnapshotDevices(): Promise<SnapshotDeviceRecord[]> {
+  if (mobileEnv.backendProvider !== 'worker') {
+    return [];
+  }
+
+  return fetchWorkerDevices();
 }
 
 function formatSnapshotTime(value?: string): string {
@@ -82,9 +97,10 @@ function formatSnapshotTime(value?: string): string {
   }).format(date);
 }
 
-function useSnapshotPolling(user: BackendUser | null) {
+function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string | null) {
   const [row, setRow] = useState<SnapshotRecord | null>(null);
   const [historyRows, setHistoryRows] = useState<SnapshotHistoryRecord[]>([]);
+  const [devices, setDevices] = useState<SnapshotDeviceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,24 +112,28 @@ function useSnapshotPolling(user: BackendUser | null) {
     setLoading(true);
 
     try {
-      const [data, history] = await Promise.all([
-        fetchLatestSnapshot(),
-        fetchSnapshotHistory()
+      const [data, nextDevices] = await Promise.all([
+        fetchLatestSnapshot(selectedDeviceId),
+        fetchSnapshotDevices()
       ]);
+      const historyDeviceId = selectedDeviceId ?? data?.device_id ?? null;
+      const history = await fetchSnapshotHistory(historyDeviceId);
       setError(null);
       setRow(data);
       setHistoryRows(history);
+      setDevices(nextDevices);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : '刷新失败。');
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [selectedDeviceId, user]);
 
   useEffect(() => {
     if (!user) {
       setRow(null);
       setHistoryRows([]);
+      setDevices([]);
       setError(null);
       return;
     }
@@ -140,7 +160,7 @@ function useSnapshotPolling(user: BackendUser | null) {
     };
   }, [refresh, user]);
 
-  return { row, historyRows, loading, error, refresh };
+  return { row, historyRows, devices, loading, error, refresh };
 }
 
 export function App() {
@@ -151,9 +171,10 @@ export function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
-  const { row, historyRows, loading, error, refresh } = useSnapshotPolling(user);
+  const { row, historyRows, devices, loading, error, refresh } = useSnapshotPolling(user, selectedDeviceId);
   const visibleHistoryRows = useMemo(
     () =>
       historyRows.filter(
@@ -212,6 +233,13 @@ export function App() {
     }
   }, [historyRows, selectedHistoryId]);
 
+  useEffect(() => {
+    if (selectedDeviceId && devices.length > 0 && !devices.some((device) => device.device_id === selectedDeviceId)) {
+      setSelectedDeviceId(null);
+      setSelectedHistoryId(null);
+    }
+  }, [devices, selectedDeviceId]);
+
   async function verifyOtp() {
     setAuthBusy(true);
     setAuthError(null);
@@ -259,6 +287,7 @@ export function App() {
     setUser(null);
     setToken('');
     setQuery('');
+    setSelectedDeviceId(null);
     setSelectedHistoryId(null);
   }
 
@@ -330,6 +359,17 @@ export function App() {
           <span>{snapshot ? `${countTabs(snapshot)} 个标签页` : '等待同步'}</span>
         </section>
 
+        {devices.length > 1 ? (
+          <DeviceFilter
+            devices={devices}
+            selectedDeviceId={selectedDeviceId}
+            onSelect={(deviceId) => {
+              setSelectedDeviceId(deviceId);
+              setSelectedHistoryId(null);
+            }}
+          />
+        ) : null}
+
         {row && visibleHistoryRows.length > 0 ? (
           <SnapshotTimeline
             latest={row}
@@ -365,6 +405,45 @@ export function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function DeviceFilter({
+  devices,
+  selectedDeviceId,
+  onSelect
+}: {
+  devices: SnapshotDeviceRecord[];
+  selectedDeviceId: string | null;
+  onSelect: (deviceId: string | null) => void;
+}) {
+  return (
+    <section className="device-strip" aria-label="设备筛选">
+      <div className="device-list">
+        <button
+          type="button"
+          className={`device-chip ${selectedDeviceId === null ? 'active' : ''}`}
+          aria-pressed={selectedDeviceId === null}
+          onClick={() => onSelect(null)}
+        >
+          <span>最近同步</span>
+          <small>自动切换</small>
+        </button>
+
+        {devices.map((device) => (
+          <button
+            type="button"
+            className={`device-chip ${selectedDeviceId === device.device_id ? 'active' : ''}`}
+            aria-pressed={selectedDeviceId === device.device_id}
+            key={device.device_id}
+            onClick={() => onSelect(device.device_id)}
+          >
+            <span>{device.device_name}</span>
+            <small>{formatSnapshotTime(device.updated_at)}</small>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

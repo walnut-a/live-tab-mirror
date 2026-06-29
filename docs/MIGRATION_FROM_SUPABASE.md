@@ -79,6 +79,7 @@ npm run auth:code -- --check
 POST /auth/verify
 POST /auth/logout
 POST /admin/login-code
+GET  /devices
 GET  /snapshot/latest
 GET  /snapshots/history
 PUT  /snapshot/:deviceId
@@ -93,6 +94,7 @@ GET  /health
 - 扩展把 token 存在 `chrome.storage.local`。
 - PWA 把 token 存在浏览器本地存储。
 - 后续 API 都用 `Authorization: Bearer <token>`。
+- 扩展首次运行自动生成安装级 `deviceId`，同一份扩展装到不同设备时不会互相覆盖。
 
 如果以后把 PWA 也迁到 Cloudflare Pages，并和 Worker 放到同一站点，可以把 PWA session 改成 httpOnly cookie。但扩展端仍然更适合显式 Bearer token。
 
@@ -198,6 +200,7 @@ apps/api/migrations/*.sql
 - `/admin/login-code`
 - `/auth/verify`
 - `/auth/logout`
+- `/devices`
 - `/snapshot/latest`
 - `/snapshots/history`
 - `/snapshot/:deviceId`

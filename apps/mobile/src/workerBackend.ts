@@ -2,6 +2,7 @@ import {
   isWorkerSessionFresh,
   normalizeEmail,
   type BackendUser,
+  type SnapshotDeviceRecord,
   type SnapshotHistoryResponse,
   type SnapshotRecord,
   type WorkerSession
@@ -99,10 +100,30 @@ export async function signOutWorker(): Promise<void> {
   clearWorkerSession();
 }
 
-export async function fetchLatestWorkerSnapshot(): Promise<SnapshotRecord | null> {
-  return workerFetch<SnapshotRecord | null>('/snapshot/latest');
+function withDeviceParam(path: string, deviceId?: string | null): string {
+  if (!deviceId) {
+    return path;
+  }
+
+  const params = new URLSearchParams({ device_id: deviceId });
+  return `${path}?${params.toString()}`;
 }
 
-export async function fetchWorkerSnapshotHistory(limit = 120): Promise<SnapshotHistoryResponse> {
-  return workerFetch<SnapshotHistoryResponse>(`/snapshots/history?limit=${limit}`);
+export async function fetchLatestWorkerSnapshot(deviceId?: string | null): Promise<SnapshotRecord | null> {
+  return workerFetch<SnapshotRecord | null>(withDeviceParam('/snapshot/latest', deviceId));
+}
+
+export async function fetchWorkerSnapshotHistory(
+  limit = 120,
+  deviceId?: string | null
+): Promise<SnapshotHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (deviceId) {
+    params.set('device_id', deviceId);
+  }
+  return workerFetch<SnapshotHistoryResponse>(`/snapshots/history?${params.toString()}`);
+}
+
+export async function fetchWorkerDevices(): Promise<SnapshotDeviceRecord[]> {
+  return workerFetch<SnapshotDeviceRecord[]>('/devices');
 }

@@ -76,12 +76,13 @@ VITE_WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
 VITE_ALLOWED_EMAIL=zhaowork74@gmail.com
 ```
 
-扩展端还可以配置：
+扩展端还可以配置默认设备名称：
 
 ```bash
-VITE_DEVICE_ID=desktop-chrome-main
 VITE_DEVICE_NAME=Mac Chrome
 ```
+
+扩展首次运行时会自动生成安装级 `deviceId`，保存在 `chrome.storage.local`。因此同一份扩展装到不同电脑或不同浏览器配置里，也会作为不同设备同步，不需要为每台设备重新构建。`VITE_DEVICE_ID` 仍可作为高级覆盖项使用，但默认不建议配置。
 
 ## 生成登录验证码
 
@@ -177,7 +178,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 和本机脚本生成的验证码登录，成功后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑，也不发送邮件。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。
+扩展 popup 里用 `zhaowork74@gmail.com` 和本机脚本生成的验证码登录，成功后会立即同步一次。这里走的是已有 Auth 用户登录，不走注册逻辑，也不发送邮件。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。popup 中可以修改设备名称，下一次同步会把新名称带到手机端。
 
 ## 运行手机网页/PWA
 
@@ -191,7 +192,7 @@ https://walnut-a.github.io/live-tab-mirror/
 
 手机上建议把网页安装成 PWA 使用：在 Android Chrome 打开上面的地址，点浏览器菜单里的“添加到主屏幕”或“安装应用”，之后从主屏幕图标打开。这样会按 `standalone` 模式运行，不再是普通 Chrome 标签页，也就不会在上下滑动时反复显示/隐藏 Chrome 工具栏。
 
-手机端列表会在打开、回到前台、手动刷新时立即读取；页面保持打开时每 30 秒做一次被动刷新。Worker 后端会返回最近三天内的历史快照，手机端可在“最近三天”时间线上切换查看，超过三天的历史会在上传和每日定时任务中清理。
+手机端列表会在打开、回到前台、手动刷新时立即读取；页面保持打开时每 30 秒做一次被动刷新。Worker 后端会返回设备列表和最近三天内的历史快照；如果有多台桌面设备，手机端会显示设备筛选条，默认跟随“最近同步”的设备，也可以固定查看某一台设备。超过三天的历史会在上传和每日定时任务中清理。
 
 代码仓库：
 

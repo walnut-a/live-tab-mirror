@@ -113,6 +113,13 @@ button.secondary {
   gap: 10px;
 }
 
+.device-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  align-items: end;
+  gap: 10px;
+}
+
 .status-card {
   min-height: 76px;
   display: flex;

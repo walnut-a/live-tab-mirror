@@ -44,6 +44,13 @@ export interface SnapshotHistoryRow extends SnapshotRow {
   id: string;
 }
 
+export interface SnapshotDeviceRow {
+  device_id: string;
+  device_name: string;
+  synced_at: string;
+  updated_at: string;
+}
+
 export interface AuthenticatedSession {
   id: string;
   email: string;

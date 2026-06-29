@@ -1,5 +1,10 @@
 import type { SupportedStorage } from '@supabase/supabase-js';
-import { isWorkerSessionFresh, type WorkerSession } from '@live-tab-mirror/shared';
+import {
+  DEFAULT_DEVICE_ID,
+  DEFAULT_DEVICE_NAME,
+  isWorkerSessionFresh,
+  type WorkerSession
+} from '@live-tab-mirror/shared';
 
 export interface ExtensionSyncState {
   lastAttemptAt: string | null;
@@ -8,6 +13,16 @@ export interface ExtensionSyncState {
   tabCount: number;
   windowCount: number;
   reason: string | null;
+}
+
+export interface ExtensionDeviceConfig {
+  deviceId: string;
+  deviceName: string;
+}
+
+export interface ExtensionDeviceDefaults {
+  deviceId?: string;
+  deviceName?: string;
 }
 
 export const DEFAULT_SYNC_STATE: ExtensionSyncState = {
@@ -21,6 +36,7 @@ export const DEFAULT_SYNC_STATE: ExtensionSyncState = {
 
 const SYNC_STATE_KEY = 'live-tab-mirror:sync-state';
 const WORKER_SESSION_KEY = 'live-tab-mirror:worker-session';
+const DEVICE_CONFIG_KEY = 'live-tab-mirror:device-config';
 
 function storageGet(keys: string | string[]): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -91,4 +107,59 @@ export async function writeWorkerSession(session: WorkerSession): Promise<void> 
 
 export async function clearWorkerSession(): Promise<void> {
   await storageRemove(WORKER_SESSION_KEY);
+}
+
+function generateDeviceId(): string {
+  return `desktop-chrome-${crypto.randomUUID()}`;
+}
+
+function normalizeDeviceName(value: string | undefined): string {
+  return value?.trim() || DEFAULT_DEVICE_NAME;
+}
+
+function getDefaultDeviceId(defaults: ExtensionDeviceDefaults): string {
+  const configuredDeviceId = defaults.deviceId?.trim();
+  return configuredDeviceId && configuredDeviceId !== DEFAULT_DEVICE_ID
+    ? configuredDeviceId
+    : generateDeviceId();
+}
+
+function isStoredDeviceConfig(value: unknown): value is ExtensionDeviceConfig {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const config = value as Partial<ExtensionDeviceConfig>;
+  return (
+    typeof config.deviceId === 'string' &&
+    config.deviceId.trim().length > 0 &&
+    config.deviceId !== DEFAULT_DEVICE_ID &&
+    typeof config.deviceName === 'string' &&
+    config.deviceName.trim().length > 0
+  );
+}
+
+export async function readDeviceConfig(defaults: ExtensionDeviceDefaults = {}): Promise<ExtensionDeviceConfig> {
+  const result = await storageGet(DEVICE_CONFIG_KEY);
+  const stored = result[DEVICE_CONFIG_KEY];
+
+  if (isStoredDeviceConfig(stored)) {
+    return stored;
+  }
+
+  const config = {
+    deviceId: getDefaultDeviceId(defaults),
+    deviceName: normalizeDeviceName(defaults.deviceName)
+  };
+  await storageSet({ [DEVICE_CONFIG_KEY]: config });
+  return config;
+}
+
+export async function writeDeviceConfig(config: ExtensionDeviceConfig): Promise<ExtensionDeviceConfig> {
+  const nextConfig = {
+    deviceId: config.deviceId.trim() || generateDeviceId(),
+    deviceName: normalizeDeviceName(config.deviceName)
+  };
+  await storageSet({ [DEVICE_CONFIG_KEY]: nextConfig });
+  return nextConfig;
 }

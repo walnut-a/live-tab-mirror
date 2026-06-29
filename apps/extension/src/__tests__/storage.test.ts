@@ -1,5 +1,13 @@
+import { DEFAULT_DEVICE_ID } from '@live-tab-mirror/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearSyncState, DEFAULT_SYNC_STATE, readSyncState, writeSyncState } from '../storage';
+import {
+  clearSyncState,
+  DEFAULT_SYNC_STATE,
+  readDeviceConfig,
+  readSyncState,
+  writeDeviceConfig,
+  writeSyncState
+} from '../storage';
 
 type StoredItems = Record<string, unknown>;
 
@@ -72,5 +80,27 @@ describe('extension sync state storage', () => {
 
     await expect(clearSyncState()).resolves.toEqual(DEFAULT_SYNC_STATE);
     await expect(readSyncState()).resolves.toEqual(DEFAULT_SYNC_STATE);
+  });
+
+  it('creates a stable per-install device id instead of reusing the build default', async () => {
+    const firstRead = await readDeviceConfig({ deviceName: 'Mac Chrome' });
+    const secondRead = await readDeviceConfig({ deviceName: 'Mac Chrome' });
+
+    expect(firstRead.deviceId).toMatch(/^desktop-chrome-[a-f0-9-]+$/);
+    expect(firstRead.deviceId).not.toBe(DEFAULT_DEVICE_ID);
+    expect(secondRead).toEqual(firstRead);
+  });
+
+  it('persists a user-editable device name without changing the device id', async () => {
+    const config = await readDeviceConfig({ deviceName: 'Mac Chrome' });
+
+    await expect(writeDeviceConfig({ ...config, deviceName: 'Studio Chrome' })).resolves.toEqual({
+      ...config,
+      deviceName: 'Studio Chrome'
+    });
+    await expect(readDeviceConfig({ deviceName: 'Mac Chrome' })).resolves.toEqual({
+      ...config,
+      deviceName: 'Studio Chrome'
+    });
   });
 });

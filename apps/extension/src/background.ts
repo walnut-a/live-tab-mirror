@@ -13,6 +13,7 @@ import {
 } from './syncPolicy';
 import {
   clearSyncState,
+  readDeviceConfig,
   readSyncState,
   readWorkerSession,
   writeSyncState,
@@ -63,9 +64,14 @@ async function recordFailure(reason: string, message: string): Promise<Extension
 }
 
 async function buildCurrentSnapshot() {
-  return createSnapshotFromWindows(await getNormalWindows(), {
+  const deviceConfig = await readDeviceConfig({
     deviceId: extensionEnv.deviceId,
-    deviceName: extensionEnv.deviceName,
+    deviceName: extensionEnv.deviceName
+  });
+
+  return createSnapshotFromWindows(await getNormalWindows(), {
+    deviceId: deviceConfig.deviceId,
+    deviceName: deviceConfig.deviceName,
     browser: 'Chrome'
   });
 }
