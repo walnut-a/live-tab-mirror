@@ -4,6 +4,9 @@ compatibility_date = "2026-06-29"
 workers_dev = true
 preview_urls = false
 
+[triggers]
+crons = ["23 19 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "live-tab-mirror"
@@ -15,3 +18,4 @@ ALLOWED_EMAIL = "zhaowork74@gmail.com"
 ALLOWED_ORIGINS = "https://walnut-a.github.io,http://localhost:5173"
 LOGIN_CODE_TTL_MINUTES = "20"
 SESSION_TTL_DAYS = "30"
+SNAPSHOT_HISTORY_RETENTION_DAYS = "3"

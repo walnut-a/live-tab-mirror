@@ -19,4 +19,16 @@ describe('mobile shell behavior', () => {
     expect(css).toMatch(/\.app-shell\s*{[\s\S]*overflow:\s*hidden/);
     expect(css).toMatch(/\.app-content\s*{[\s\S]*overflow-y:\s*auto/);
   });
+
+  it('renders recent snapshot history without expanding the page width', () => {
+    const appPath = resolve(import.meta.dirname, '../App.tsx');
+    const stylesPath = resolve(import.meta.dirname, '../styles.css');
+    const appSource = readFileSync(appPath, 'utf8');
+    const css = readFileSync(stylesPath, 'utf8');
+
+    expect(appSource).toContain('aria-label="历史快照"');
+    expect(appSource).toContain('最近三天');
+    expect(css).toMatch(/\.history-list\s*{[\s\S]*overflow-x:\s*auto/);
+    expect(css).toMatch(/\.history-chip\s*{[\s\S]*flex:\s*0 0 auto/);
+  });
 });

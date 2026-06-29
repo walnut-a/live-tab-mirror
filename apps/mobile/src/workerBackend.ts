@@ -2,6 +2,7 @@ import {
   isWorkerSessionFresh,
   normalizeEmail,
   type BackendUser,
+  type SnapshotHistoryResponse,
   type SnapshotRecord,
   type WorkerSession
 } from '@live-tab-mirror/shared';
@@ -100,4 +101,8 @@ export async function signOutWorker(): Promise<void> {
 
 export async function fetchLatestWorkerSnapshot(): Promise<SnapshotRecord | null> {
   return workerFetch<SnapshotRecord | null>('/snapshot/latest');
+}
+
+export async function fetchWorkerSnapshotHistory(limit = 120): Promise<SnapshotHistoryResponse> {
+  return workerFetch<SnapshotHistoryResponse>(`/snapshots/history?limit=${limit}`);
 }

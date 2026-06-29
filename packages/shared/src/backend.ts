@@ -15,6 +15,15 @@ export interface SnapshotRecord {
   updated_at: string;
 }
 
+export interface SnapshotHistoryRecord extends SnapshotRecord {
+  id: string;
+}
+
+export interface SnapshotHistoryResponse {
+  retentionDays: number;
+  snapshots: SnapshotHistoryRecord[];
+}
+
 export interface WorkerSession {
   email: string;
   token: string;

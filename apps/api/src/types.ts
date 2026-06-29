@@ -8,6 +8,7 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   LOGIN_CODE_TTL_MINUTES?: string;
   SESSION_TTL_DAYS?: string;
+  SNAPSHOT_HISTORY_RETENTION_DAYS?: string;
 }
 
 export interface LoginCodeRow {
@@ -37,6 +38,10 @@ export interface SnapshotRow {
   snapshot_json: string;
   synced_at: string;
   updated_at: string;
+}
+
+export interface SnapshotHistoryRow extends SnapshotRow {
+  id: string;
 }
 
 export interface AuthenticatedSession {

@@ -11,7 +11,7 @@
 
 - GitHub Pages 继续放 PWA 静态资源。
 - Cloudflare Worker 提供登录、上传 snapshot、读取 snapshot 的 API。
-- D1 保存当前 snapshot、一次性登录码、session，不保存历史。
+- D1 保存当前 snapshot、最近三天 snapshot 历史、一次性登录码和 session。
 - 不使用 Cloudflare KV 存 snapshot、验证码或 session。
 - 扩展和 PWA 不再接触 Supabase URL、publishable key，也不再依赖 Supabase Auth。
 
@@ -80,6 +80,7 @@ POST /auth/verify
 POST /auth/logout
 POST /admin/login-code
 GET  /snapshot/latest
+GET  /snapshots/history
 PUT  /snapshot/:deviceId
 GET  /health
 ```
@@ -97,7 +98,7 @@ GET  /health
 
 ### D1 表结构
 
-只保存当前状态，不保存历史：
+保存当前状态，同时保留最近三天内的 snapshot 历史：
 
 ```sql
 create table login_codes (
@@ -129,6 +130,17 @@ create table desktop_tab_snapshots (
   updated_at text not null,
   primary key (email, device_id)
 );
+
+create table desktop_tab_snapshot_history (
+  id text primary key,
+  email text not null,
+  device_id text not null,
+  device_name text not null,
+  snapshot_hash text not null,
+  snapshot_json text not null,
+  synced_at text not null,
+  updated_at text not null
+);
 ```
 
 实现细节：
@@ -150,8 +162,8 @@ create table desktop_tab_snapshots (
 - `PUT /snapshot/:deviceId` 校验 snapshot schema version 和基本 payload 大小。
 - `PUT /snapshot/:deviceId` 比对 `snapshot_hash`，payload 没变化时直接返回，不写 D1。
 - 扩展端保留事件 debounce，并增加最小上传间隔，避免异常循环造成请求风暴。
-- 不新增历史表，不新增审计流水表。
-- 不使用 KV。当前 snapshot、验证码和 session 都放 D1。
+- 历史只保留最近三天，不做长期审计流水。
+- 不使用 KV。当前 snapshot、历史 snapshot、验证码和 session 都放 D1。
 
 ## 迁移步骤
 
@@ -187,6 +199,7 @@ apps/api/migrations/*.sql
 - `/auth/verify`
 - `/auth/logout`
 - `/snapshot/latest`
+- `/snapshots/history`
 - `/snapshot/:deviceId`
 
 已有测试：

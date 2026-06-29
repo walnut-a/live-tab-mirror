@@ -2,7 +2,7 @@
 
 一个个人用的实时标签页镜像工具：桌面 Chrome 扩展同步当前打开的标签页，手机网页/PWA 查看最新列表、搜索、点击打开。
 
-它只保存“当前 snapshot”，不是稍后读、收藏夹、浏览历史或知识库。
+它默认展示“当前 snapshot”，并保留最近三天内的快照历史。它仍然不是稍后读、收藏夹、长期浏览历史或知识库。
 
 需求文档见 [docs/PRD.md](docs/PRD.md)。
 
@@ -109,7 +109,7 @@ npm run auth:code -- --check
 
 ## 准备 Cloudflare Worker + D1
 
-Worker 后端在 `apps/api`，只用 D1，不用 KV。
+Worker 后端在 `apps/api`，只用 D1，不用 KV。D1 保存最新 snapshot、最近三天内的 snapshot 历史、一次性登录码和 session。
 
 1. 创建 D1 数据库：
 
@@ -127,6 +127,8 @@ Worker 后端在 `apps/api`，只用 D1，不用 KV。
    ```
 
    `SESSION_SECRET` 用于 hash 登录码和 session token；`ADMIN_CODE_SECRET` 用于保护手动生成验证码接口。不要把它们写进前端 env。
+
+   `apps/api/wrangler.toml` 里的 `SNAPSHOT_HISTORY_RETENTION_DAYS` 控制历史保留窗口，当前默认是 3 天。
 
 4. 应用 D1 migration：
 
@@ -185,11 +187,11 @@ apps/extension/dist
 https://walnut-a.github.io/live-tab-mirror/
 ```
 
-网页登录同样只允许 `zhaowork74@gmail.com`。先在本机运行 `npm run auth:code`，再把生成的验证码填进手机网页即可。
+网页登录同样只允许 `zhaowork74@gmail.com`。如果当前使用 Worker 后端，先在本机运行 `npm run auth:worker-code`，再把生成的验证码填进手机网页即可；如果还在使用 Supabase 兼容路径，则运行 `npm run auth:code`。
 
 手机上建议把网页安装成 PWA 使用：在 Android Chrome 打开上面的地址，点浏览器菜单里的“添加到主屏幕”或“安装应用”，之后从主屏幕图标打开。这样会按 `standalone` 模式运行，不再是普通 Chrome 标签页，也就不会在上下滑动时反复显示/隐藏 Chrome 工具栏。
 
-手机端列表会在打开、回到前台、手动刷新时立即读取；页面保持打开时每 30 秒做一次被动刷新。
+手机端列表会在打开、回到前台、手动刷新时立即读取；页面保持打开时每 30 秒做一次被动刷新。Worker 后端会返回最近三天内的历史快照，手机端可在“最近三天”时间线上切换查看，超过三天的历史会在上传和每日定时任务中清理。
 
 代码仓库：
 
@@ -217,7 +219,7 @@ npm run build -w @live-tab-mirror/mobile
 
 本项目当前使用 GitHub Pages 部署 `apps/mobile/dist`。PWA manifest 和最小 service worker 已在生产构建里输出；manifest 使用相对 `start_url`、`scope` 和 icon 路径，service worker 会按 Vite base path 注册到 `/live-tab-mirror/sw.js`。
 
-GitHub Pages 是公开入口；当前仓库也按低成本方案设为 public。前端 bundle 会公开 Supabase project URL 和 publishable key，这是 Supabase 浏览器客户端的正常模型。数据访问边界是 Supabase Auth + RLS，不是 GitHub Pages。
+GitHub Pages 是公开入口；当前仓库也按低成本方案设为 public。当前线上推荐路径是 Worker + D1：前端 bundle 只公开 Worker URL，数据访问边界是 Worker Bearer session 和服务端邮箱限制，不是 GitHub Pages。Supabase 兼容路径仍只允许使用 project URL + publishable key，不能把 service role key 放进前端代码。
 
 迁移出 Supabase 的方案见 [docs/MIGRATION_FROM_SUPABASE.md](docs/MIGRATION_FROM_SUPABASE.md)。当前推荐路线是先用本机脚本绕开邮件限流，后续再迁到 Cloudflare Workers + D1。
 

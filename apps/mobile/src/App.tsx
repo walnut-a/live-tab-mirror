@@ -10,11 +10,13 @@ import {
   hasOpenableUrl,
   isAllowedEmail,
   normalizeEmail,
+  type SnapshotHistoryRecord,
   type SnapshotRecord,
   type TabSnapshot
 } from '@live-tab-mirror/shared';
 import {
   ExternalLink,
+  History,
   Loader2,
   LogOut,
   Pin,
@@ -26,10 +28,13 @@ import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
 import { supabase } from './supabaseClient';
 import {
   fetchLatestWorkerSnapshot,
+  fetchWorkerSnapshotHistory,
   getWorkerUser,
   signOutWorker,
   verifyWorkerCode
 } from './workerBackend';
+
+const HISTORY_FETCH_LIMIT = 120;
 
 async function fetchLatestSnapshot(): Promise<SnapshotRecord | null> {
   if (mobileEnv.backendProvider === 'worker') {
@@ -50,8 +55,36 @@ async function fetchLatestSnapshot(): Promise<SnapshotRecord | null> {
   return (data as SnapshotRecord | null) ?? null;
 }
 
+async function fetchSnapshotHistory(): Promise<SnapshotHistoryRecord[]> {
+  if (mobileEnv.backendProvider !== 'worker') {
+    return [];
+  }
+
+  const data = await fetchWorkerSnapshotHistory(HISTORY_FETCH_LIMIT);
+  return data.snapshots;
+}
+
+function formatSnapshotTime(value?: string): string {
+  if (!value) {
+    return '未知时间';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '未知时间';
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
 function useSnapshotPolling(user: BackendUser | null) {
   const [row, setRow] = useState<SnapshotRecord | null>(null);
+  const [historyRows, setHistoryRows] = useState<SnapshotHistoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,9 +96,13 @@ function useSnapshotPolling(user: BackendUser | null) {
     setLoading(true);
 
     try {
-      const data = await fetchLatestSnapshot();
+      const [data, history] = await Promise.all([
+        fetchLatestSnapshot(),
+        fetchSnapshotHistory()
+      ]);
       setError(null);
       setRow(data);
+      setHistoryRows(history);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : '刷新失败。');
     } finally {
@@ -76,6 +113,7 @@ function useSnapshotPolling(user: BackendUser | null) {
   useEffect(() => {
     if (!user) {
       setRow(null);
+      setHistoryRows([]);
       setError(null);
       return;
     }
@@ -102,7 +140,7 @@ function useSnapshotPolling(user: BackendUser | null) {
     };
   }, [refresh, user]);
 
-  return { row, loading, error, refresh };
+  return { row, historyRows, loading, error, refresh };
 }
 
 export function App() {
@@ -113,16 +151,31 @@ export function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
-  const { row, loading, error, refresh } = useSnapshotPolling(user);
-  const snapshot = row?.snapshot ?? null;
+  const { row, historyRows, loading, error, refresh } = useSnapshotPolling(user);
+  const visibleHistoryRows = useMemo(
+    () =>
+      historyRows.filter(
+        (historyRow) =>
+          historyRow.updated_at !== row?.updated_at ||
+          historyRow.snapshot_hash !== row?.snapshot_hash
+      ),
+    [historyRows, row?.snapshot_hash, row?.updated_at]
+  );
+  const selectedHistoryRow = useMemo(
+    () => historyRows.find((historyRow) => historyRow.id === selectedHistoryId) ?? null,
+    [historyRows, selectedHistoryId]
+  );
+  const activeRow = selectedHistoryId ? selectedHistoryRow ?? row : row;
+  const snapshot = activeRow?.snapshot ?? null;
   const filteredSnapshot = useMemo(
     () => (snapshot ? filterSnapshot(snapshot, query) : null),
     [query, snapshot]
   );
   const freshness = useMemo(
-    () => describeFreshness(snapshot?.syncedAt ?? row?.synced_at ?? null),
-    [row?.synced_at, snapshot?.syncedAt]
+    () => describeFreshness(snapshot?.syncedAt ?? activeRow?.synced_at ?? null),
+    [activeRow?.synced_at, snapshot?.syncedAt]
   );
   const backendConfigured = isBackendConfigured();
   const otpLoginView = getOtpLoginViewState({
@@ -152,6 +205,12 @@ export function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (selectedHistoryId && !historyRows.some((historyRow) => historyRow.id === selectedHistoryId)) {
+      setSelectedHistoryId(null);
+    }
+  }, [historyRows, selectedHistoryId]);
 
   async function verifyOtp() {
     setAuthBusy(true);
@@ -200,6 +259,7 @@ export function App() {
     setUser(null);
     setToken('');
     setQuery('');
+    setSelectedHistoryId(null);
   }
 
   if (authLoading) {
@@ -266,9 +326,18 @@ export function App() {
 
       <section className="app-content">
         <section className="meta-row">
-          <span>{row?.device_name ?? mobileEnv.allowedEmail}</span>
+          <span>{activeRow?.device_name ?? mobileEnv.allowedEmail}</span>
           <span>{snapshot ? `${countTabs(snapshot)} 个标签页` : '等待同步'}</span>
         </section>
+
+        {row && visibleHistoryRows.length > 0 ? (
+          <SnapshotTimeline
+            latest={row}
+            rows={visibleHistoryRows}
+            selectedId={selectedHistoryId}
+            onSelect={setSelectedHistoryId}
+          />
+        ) : null}
 
         <label className="search-box">
           <Search size={18} />
@@ -296,6 +365,51 @@ export function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function SnapshotTimeline({
+  latest,
+  rows,
+  selectedId,
+  onSelect
+}: {
+  latest: SnapshotRecord;
+  rows: SnapshotHistoryRecord[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  return (
+    <section className="history-strip" aria-label="历史快照">
+      <div className="history-heading">
+        <History size={16} />
+        <span>最近三天</span>
+      </div>
+      <div className="history-list">
+        <button
+          type="button"
+          className={`history-chip ${selectedId === null ? 'active' : ''}`}
+          aria-pressed={selectedId === null}
+          onClick={() => onSelect(null)}
+        >
+          <span>最新</span>
+          <small>{formatSnapshotTime(latest.updated_at)}</small>
+        </button>
+
+        {rows.map((historyRow) => (
+          <button
+            type="button"
+            className={`history-chip ${selectedId === historyRow.id ? 'active' : ''}`}
+            aria-pressed={selectedId === historyRow.id}
+            key={historyRow.id}
+            onClick={() => onSelect(historyRow.id)}
+          >
+            <span>{formatSnapshotTime(historyRow.updated_at)}</span>
+            <small>{countTabs(historyRow.snapshot)} 个</small>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

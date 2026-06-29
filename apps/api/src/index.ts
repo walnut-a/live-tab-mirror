@@ -2,10 +2,17 @@ import {
   createSnapshotHash,
   isAllowedEmail,
   isTabSnapshot,
-  normalizeEmail,
-  type TabSnapshot
+  normalizeEmail
 } from '@live-tab-mirror/shared';
 import { errorResponse, jsonResponse, optionsResponse, readJson } from './http';
+import {
+  cleanupSnapshotHistory,
+  getSnapshotHistoryCutoffIso,
+  readSnapshotHistoryLimit,
+  readSnapshotHistoryRetentionDays,
+  snapshotHistoryRowToBody,
+  snapshotRowToBody
+} from './history';
 import {
   addDays,
   addMinutes,
@@ -16,7 +23,15 @@ import {
   hashWithSecret,
   readPositiveInteger
 } from './security';
-import type { AuthenticatedSession, Env, LoginCodeRow, SessionRow, SnapshotRow, SnapshotUpsertBody } from './types';
+import type {
+  AuthenticatedSession,
+  Env,
+  LoginCodeRow,
+  SessionRow,
+  SnapshotHistoryRow,
+  SnapshotRow,
+  SnapshotUpsertBody
+} from './types';
 
 interface VerifyBody {
   email?: string;
@@ -142,17 +157,6 @@ async function logout(request: Request, env: Env): Promise<Response> {
   return jsonResponse(request, env, { ok: true });
 }
 
-function snapshotRowToBody(row: SnapshotRow): unknown {
-  return {
-    device_id: row.device_id,
-    device_name: row.device_name,
-    snapshot: JSON.parse(row.snapshot_json) as TabSnapshot,
-    snapshot_hash: row.snapshot_hash,
-    synced_at: row.synced_at,
-    updated_at: row.updated_at
-  };
-}
-
 async function latestSnapshot(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const row = await env.DB.prepare(
@@ -164,6 +168,25 @@ async function latestSnapshot(request: Request, env: Env): Promise<Response> {
   ).bind(session.email).first<SnapshotRow>();
 
   return jsonResponse(request, env, row ? snapshotRowToBody(row) : null);
+}
+
+async function snapshotHistory(request: Request, env: Env): Promise<Response> {
+  const session = await requireSession(request, env);
+  const url = new URL(request.url);
+  const limit = readSnapshotHistoryLimit(url.searchParams.get('limit'));
+  const cutoff = getSnapshotHistoryCutoffIso(env);
+  const rows = await env.DB.prepare(
+    `select id, email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+     from desktop_tab_snapshot_history
+     where email = ?1 and updated_at >= ?2
+     order by updated_at desc
+     limit ?3`
+  ).bind(session.email, cutoff, limit).all<SnapshotHistoryRow>();
+
+  return jsonResponse(request, env, {
+    retentionDays: readSnapshotHistoryRetentionDays(env),
+    snapshots: rows.results.map(snapshotHistoryRowToBody)
+  });
 }
 
 async function upsertSnapshot(request: Request, env: Env, deviceId: string): Promise<Response> {
@@ -202,26 +225,46 @@ async function upsertSnapshot(request: Request, env: Env, deviceId: string): Pro
   }
 
   const updatedAt = nowIso();
-  await env.DB.prepare(
-    `insert into desktop_tab_snapshots (
-       email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
-     )
-     values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-     on conflict(email, device_id) do update set
-       device_name = excluded.device_name,
-       snapshot_hash = excluded.snapshot_hash,
-       snapshot_json = excluded.snapshot_json,
-       synced_at = excluded.synced_at,
-       updated_at = excluded.updated_at`
-  ).bind(
-    session.email,
-    deviceId,
-    snapshot.device.deviceName,
-    snapshotHash,
-    JSON.stringify(snapshot),
-    snapshot.syncedAt,
-    updatedAt
-  ).run();
+  const snapshotJson = JSON.stringify(snapshot);
+  await env.DB.batch([
+    env.DB.prepare(
+      `insert into desktop_tab_snapshots (
+         email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+       )
+       values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+       on conflict(email, device_id) do update set
+         device_name = excluded.device_name,
+         snapshot_hash = excluded.snapshot_hash,
+         snapshot_json = excluded.snapshot_json,
+         synced_at = excluded.synced_at,
+         updated_at = excluded.updated_at`
+    ).bind(
+      session.email,
+      deviceId,
+      snapshot.device.deviceName,
+      snapshotHash,
+      snapshotJson,
+      snapshot.syncedAt,
+      updatedAt
+    ),
+    env.DB.prepare(
+      `insert into desktop_tab_snapshot_history (
+         id, email, device_id, device_name, snapshot_hash, snapshot_json, synced_at, updated_at
+       )
+       values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+    ).bind(
+      crypto.randomUUID(),
+      session.email,
+      deviceId,
+      snapshot.device.deviceName,
+      snapshotHash,
+      snapshotJson,
+      snapshot.syncedAt,
+      updatedAt
+    ),
+    env.DB.prepare('delete from desktop_tab_snapshot_history where updated_at < ?1')
+      .bind(getSnapshotHistoryCutoffIso(env))
+  ]);
 
   return jsonResponse(request, env, {
     ok: true,
@@ -259,6 +302,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return latestSnapshot(request, env);
   }
 
+  if (request.method === 'GET' && url.pathname === '/snapshots/history') {
+    return snapshotHistory(request, env);
+  }
+
   const snapshotMatch = url.pathname.match(/^\/snapshot\/([^/]+)$/);
   if (request.method === 'PUT' && snapshotMatch) {
     return upsertSnapshot(request, env, decodeURIComponent(snapshotMatch[1]));
@@ -279,5 +326,9 @@ export default {
       const message = error instanceof Error ? error.message : 'Internal server error.';
       return errorResponse(request, env, 500, message);
     }
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(cleanupSnapshotHistory(env));
   }
 };
