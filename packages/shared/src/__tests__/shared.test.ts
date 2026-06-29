@@ -213,6 +213,42 @@ describe('snapshot shaping', () => {
     await expect(createSnapshotHash(snapshot)).resolves.toBe(await createSnapshotHash(snapshot));
   });
 
+  it('does not treat a new sync timestamp as a content change', async () => {
+    const windows = [
+      {
+        id: 1,
+        focused: true,
+        incognito: false,
+        tabs: [
+          {
+            id: 1,
+            index: 0,
+            title: 'Example',
+            url: 'https://example.com',
+            active: true,
+            pinned: false,
+            audible: false,
+            groupId: -1
+          }
+        ]
+      }
+    ];
+    const first = createSnapshotFromWindows(windows, {
+      deviceId: 'desktop-chrome-main',
+      deviceName: 'Mac Chrome',
+      browser: 'Chrome',
+      now: new Date('2026-06-28T11:24:32.000Z')
+    });
+    const second = createSnapshotFromWindows(windows, {
+      deviceId: 'desktop-chrome-main',
+      deviceName: 'Mac Chrome',
+      browser: 'Chrome',
+      now: new Date('2026-06-28T11:25:32.000Z')
+    });
+
+    await expect(createSnapshotHash(first)).resolves.toBe(await createSnapshotHash(second));
+  });
+
   it('searches title, url, and domain without changing the original grouping order', () => {
     const snapshot = createSnapshotFromWindows(
       [

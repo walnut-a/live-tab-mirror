@@ -176,9 +176,14 @@ export function isTabSnapshot(value: unknown): value is TabSnapshot {
 }
 
 export async function createSnapshotHash(snapshot: TabSnapshot): Promise<string> {
+  const hashableSnapshot = {
+    schemaVersion: snapshot.schemaVersion,
+    device: snapshot.device,
+    windows: snapshot.windows
+  };
   const digest = await crypto.subtle.digest(
     'SHA-256',
-    new TextEncoder().encode(JSON.stringify(snapshot))
+    new TextEncoder().encode(JSON.stringify(hashableSnapshot))
   );
 
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
