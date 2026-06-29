@@ -78,6 +78,7 @@ npm run auth:code -- --check
 ```text
 POST /auth/verify
 POST /auth/logout
+POST /admin/login-code
 GET  /snapshot/latest
 PUT  /snapshot/:deviceId
 GET  /health
@@ -122,6 +123,7 @@ create table desktop_tab_snapshots (
   email text not null,
   device_id text not null,
   device_name text not null,
+  snapshot_hash text not null,
   snapshot_json text not null,
   synced_at text not null,
   updated_at text not null,
@@ -141,7 +143,7 @@ create table desktop_tab_snapshots (
 
 ### 安全边界
 
-- Worker 环境变量保存 `SESSION_SECRET`、`ADMIN_GENERATE_CODE_SECRET` 等后端秘密。
+- Worker 环境变量保存 `SESSION_SECRET`、`ADMIN_CODE_SECRET` 等后端秘密。
 - 前端和扩展只保存 session token，不保存后端 secret。
 - CORS 只允许 GitHub Pages 域名和已知 Chrome extension origin。
 - 即使 CORS 配错，也必须靠 Bearer token 做真正鉴权。
@@ -169,7 +171,7 @@ create table desktop_tab_snapshots (
 
 ### 1. 新建 Worker + D1 骨架
 
-新增：
+已新增：
 
 ```text
 apps/api
@@ -178,36 +180,32 @@ apps/api/wrangler.toml
 apps/api/migrations/*.sql
 ```
 
-先实现：
+已实现：
 
 - `/health`
+- `/admin/login-code`
 - `/auth/verify`
+- `/auth/logout`
 - `/snapshot/latest`
 - `/snapshot/:deviceId`
 
-测试：
+已有测试：
 
 - Worker 单元测试校验 code TTL、单次使用、错误 code 拒绝。
-- snapshot 写入后读取返回最新数据。
-- 非本人 email 拒绝。
+- shared 层测试校验 snapshot hash、schema 和 provider/session helper。
 
 ### 2. 抽象前端后端客户端
 
-新增共享接口：
+已新增共享类型：
 
 ```ts
-interface TabMirrorBackend {
-  verifyLogin(email: string, code: string): Promise<void>;
-  getLatestSnapshot(): Promise<SnapshotRow | null>;
-  upsertSnapshot(snapshot: TabSnapshot): Promise<void>;
-  signOut(): Promise<void>;
-}
+type BackendProvider = "supabase" | "worker";
 ```
 
-然后提供两个实现：
+已在 PWA 和扩展里提供两个 provider 分支：
 
-- `supabaseBackend`
-- `workerBackend`
+- Supabase：沿用现有 Auth + Postgres + RLS。
+- Worker：使用 Cloudflare Worker API + D1 + Bearer session token。
 
 通过环境变量切换：
 
@@ -216,13 +214,17 @@ VITE_BACKEND_PROVIDER=supabase | worker
 VITE_WORKER_API_URL=https://live-tab-mirror-api.<account>.workers.dev
 ```
 
-### 3. 双写验证
+### 3. 部署并验证 Worker
 
-扩展先做一段时间双写：
+下一步：
 
-- 主写 Supabase。
-- 旁路写 Worker。
-- PWA 先保留读 Supabase，也提供切换到 Worker 的构建配置。
+- 在 Cloudflare 创建 D1 数据库。
+- 把 `database_id` 填进 `apps/api/wrangler.toml`。
+- 设置 `SESSION_SECRET` 和 `ADMIN_CODE_SECRET`。
+- 执行 D1 migration。
+- 部署 Worker。
+- 用 `npm run auth:worker-code` 生成验证码。
+- 本地把扩展和 PWA 切到 `VITE_BACKEND_PROVIDER=worker` 验证完整链路。
 
 验证重点：
 
@@ -231,7 +233,7 @@ VITE_WORKER_API_URL=https://live-tab-mirror-api.<account>.workers.dev
 - 手机端搜索和打开链接行为不变。
 - 扩展重启、PWA 重开后 session 仍有效。
 
-### 4. 切换生产读取
+### 4. 切换生产读取/写入
 
 当 Worker 连续稳定后：
 

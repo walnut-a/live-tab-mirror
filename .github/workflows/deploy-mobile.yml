@@ -21,6 +21,8 @@ jobs:
     env:
       VITE_ALLOWED_EMAIL: zhaowork74@gmail.com
       VITE_BASE_PATH: /live-tab-mirror/
+      VITE_BACKEND_PROVIDER: ${{ vars.VITE_BACKEND_PROVIDER || 'supabase' }}
+      VITE_WORKER_API_URL: ${{ vars.VITE_WORKER_API_URL }}
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
     steps:

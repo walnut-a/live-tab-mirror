@@ -1,0 +1,15 @@
+name = "live-tab-mirror-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-29"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "live-tab-mirror"
+database_id = "replace-with-cloudflare-d1-database-id"
+migrations_dir = "migrations"
+
+[vars]
+ALLOWED_EMAIL = "zhaowork74@gmail.com"
+ALLOWED_ORIGINS = "https://walnut-a.github.io,http://localhost:5173"
+LOGIN_CODE_TTL_MINUTES = "20"
+SESSION_TTL_DAYS = "30"

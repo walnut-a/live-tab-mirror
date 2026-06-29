@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ALLOWED_EMAIL } from '../constants';
 import { getOtpLoginViewState, isAllowedEmail } from '../auth';
+import { isWorkerSessionFresh, normalizeBackendProvider } from '../backend';
 import {
+  createSnapshotHash,
   createSnapshotFromWindows,
   filterSnapshot,
   getDomain,
-  hasOpenableUrl
+  hasOpenableUrl,
+  isTabSnapshot
 } from '../snapshot';
 import { describeFreshness } from '../freshness';
 
@@ -45,6 +48,38 @@ describe('auth guards', () => {
     ).toMatchObject({
       verifyButtonDisabled: true
     });
+  });
+});
+
+describe('backend provider helpers', () => {
+  it('defaults to Supabase unless the worker provider is explicitly selected', () => {
+    expect(normalizeBackendProvider(undefined)).toBe('supabase');
+    expect(normalizeBackendProvider('supabase')).toBe('supabase');
+    expect(normalizeBackendProvider('worker')).toBe('worker');
+  });
+
+  it('keeps expired worker sessions out of the app state', () => {
+    expect(
+      isWorkerSessionFresh(
+        {
+          email: ALLOWED_EMAIL,
+          token: 'token',
+          expiresAt: '2026-06-29T10:00:00.000Z'
+        },
+        new Date('2026-06-29T09:59:59.000Z')
+      )
+    ).toBe(true);
+
+    expect(
+      isWorkerSessionFresh(
+        {
+          email: ALLOWED_EMAIL,
+          token: 'token',
+          expiresAt: '2026-06-29T10:00:00.000Z'
+        },
+        new Date('2026-06-29T10:00:01.000Z')
+      )
+    ).toBe(false);
   });
 });
 
@@ -142,6 +177,40 @@ describe('snapshot shaping', () => {
       groupId: 3
     });
     expect(snapshot.syncedAt).toBe('2026-06-28T11:24:32.000Z');
+    expect(isTabSnapshot(snapshot)).toBe(true);
+  });
+
+  it('hashes snapshots deterministically for duplicate upload suppression', async () => {
+    const snapshot = createSnapshotFromWindows(
+      [
+        {
+          id: 1,
+          focused: true,
+          incognito: false,
+          tabs: [
+            {
+              id: 1,
+              index: 0,
+              title: 'Example',
+              url: 'https://example.com',
+              active: true,
+              pinned: false,
+              audible: false,
+              groupId: -1
+            }
+          ]
+        }
+      ],
+      {
+        deviceId: 'desktop-chrome-main',
+        deviceName: 'Mac Chrome',
+        browser: 'Chrome',
+        now: new Date('2026-06-28T11:24:32.000Z')
+      }
+    );
+
+    await expect(createSnapshotHash(snapshot)).resolves.toMatch(/^[a-f0-9]{64}$/);
+    await expect(createSnapshotHash(snapshot)).resolves.toBe(await createSnapshotHash(snapshot));
   });
 
   it('searches title, url, and domain without changing the original grouping order', () => {

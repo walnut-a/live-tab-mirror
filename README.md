@@ -9,6 +9,7 @@
 ## 目录结构
 
 ```text
+apps/api            Cloudflare Worker + D1 后端
 apps/extension      Chrome Extension Manifest V3
 apps/mobile         手机网页/PWA
 packages/shared     两端共用的类型、邮箱限制、snapshot、搜索、新鲜度逻辑
@@ -61,8 +62,17 @@ cp apps/mobile/.env.example apps/mobile/.env.local
 填入：
 
 ```bash
+VITE_BACKEND_PROVIDER=supabase
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+VITE_ALLOWED_EMAIL=zhaowork74@gmail.com
+```
+
+如果切到 Cloudflare Worker + D1：
+
+```bash
+VITE_BACKEND_PROVIDER=worker
+VITE_WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
 VITE_ALLOWED_EMAIL=zhaowork74@gmail.com
 ```
 
@@ -96,6 +106,56 @@ npm run auth:code -- --check
 ```
 
 脚本会输出 `zhaowork74@gmail.com` 的一次性验证码。打开扩展或手机网页，把这个验证码填进“验证码”输入框即可。验证码有效期以 Supabase Auth 当前配置为准。
+
+## 准备 Cloudflare Worker + D1
+
+Worker 后端在 `apps/api`，只用 D1，不用 KV。
+
+1. 创建 D1 数据库：
+
+   ```bash
+   cd apps/api
+   npx wrangler d1 create live-tab-mirror
+   ```
+
+2. 把输出的 `database_id` 填进 `apps/api/wrangler.toml`。
+3. 设置 Worker secrets：
+
+   ```bash
+   npx wrangler secret put SESSION_SECRET
+   npx wrangler secret put ADMIN_CODE_SECRET
+   ```
+
+   `SESSION_SECRET` 用于 hash 登录码和 session token；`ADMIN_CODE_SECRET` 用于保护手动生成验证码接口。不要把它们写进前端 env。
+
+4. 应用 D1 migration：
+
+   ```bash
+   npx wrangler d1 migrations apply live-tab-mirror --remote
+   ```
+
+5. 部署 Worker：
+
+   ```bash
+   npm run deploy -w @live-tab-mirror/api
+   ```
+
+6. 生成 Worker 登录验证码：
+
+   ```bash
+   export WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
+   export WORKER_ADMIN_CODE_SECRET=your_admin_code_secret
+   npm run auth:worker-code
+   ```
+
+7. 把扩展和 PWA 的环境变量切到：
+
+   ```bash
+   VITE_BACKEND_PROVIDER=worker
+   VITE_WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
+   ```
+
+如果 Worker 使用自定义域名，Chrome 扩展的 `apps/extension/public/manifest.json` 还需要把该域名加入 `host_permissions`。默认已经包含 `https://*.workers.dev/*`。
 
 ## 加载 Chrome 扩展
 
@@ -166,6 +226,8 @@ GitHub Pages workflow：`.github/workflows/deploy-mobile.yml`。push 到 `main` 
 GitHub repo settings 需要配置：
 
 - Repository variable: `VITE_SUPABASE_URL`
+- Repository variable: `VITE_BACKEND_PROVIDER`
+- Repository variable: `VITE_WORKER_API_URL`
 - Repository secret: `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 publishable key 会被前端打包，这是 Supabase 客户端的正常用法；不要把 service role key 放进 GitHub Actions 或任何前端环境变量。
@@ -174,6 +236,7 @@ publishable key 会被前端打包，这是 Supabase 客户端的正常用法；
 
 ```bash
 npm run auth:code -- --check
+npm run auth:worker-code -- --help
 npm test
 npm run typecheck
 npm run build
@@ -181,8 +244,9 @@ npm run build
 
 ## 安全边界
 
-- 前端和扩展只使用 Supabase project URL + publishable key。
+- Supabase 模式下，前端和扩展只使用 Supabase project URL + publishable key。
+- Worker 模式下，前端和扩展只使用 Worker API URL 和用户 session token。
 - 代码里不要放 service_role key、数据库密码或 Dashboard 凭据。
-- 扩展只请求 `tabs`、`storage`、`alarms` 和 Supabase host permission。
+- 扩展只请求 `tabs`、`storage`、`alarms`、Supabase host permission 和 `workers.dev` host permission。
 - snapshot 默认过滤 `chrome://`、`file://` 等不可打开或本地敏感 URL。
 - 不抓取网页正文、cookie、localStorage、截图或历史记录。

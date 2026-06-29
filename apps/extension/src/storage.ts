@@ -1,4 +1,5 @@
 import type { SupportedStorage } from '@supabase/supabase-js';
+import { isWorkerSessionFresh, type WorkerSession } from '@live-tab-mirror/shared';
 
 export interface ExtensionSyncState {
   lastAttemptAt: string | null;
@@ -19,6 +20,7 @@ export const DEFAULT_SYNC_STATE: ExtensionSyncState = {
 };
 
 const SYNC_STATE_KEY = 'live-tab-mirror:sync-state';
+const WORKER_SESSION_KEY = 'live-tab-mirror:worker-session';
 
 function storageGet(keys: string | string[]): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -69,4 +71,24 @@ export async function writeSyncState(state: ExtensionSyncState): Promise<Extensi
 export async function clearSyncState(): Promise<ExtensionSyncState> {
   await storageRemove(SYNC_STATE_KEY);
   return DEFAULT_SYNC_STATE;
+}
+
+export async function readWorkerSession(now = new Date()): Promise<WorkerSession | null> {
+  const result = await storageGet(WORKER_SESSION_KEY);
+  const session = result[WORKER_SESSION_KEY] as WorkerSession | undefined;
+
+  if (isWorkerSessionFresh(session ?? null, now)) {
+    return session ?? null;
+  }
+
+  await storageRemove(WORKER_SESSION_KEY);
+  return null;
+}
+
+export async function writeWorkerSession(session: WorkerSession): Promise<void> {
+  await storageSet({ [WORKER_SESSION_KEY]: session });
+}
+
+export async function clearWorkerSession(): Promise<void> {
+  await storageRemove(WORKER_SESSION_KEY);
 }

@@ -4,14 +4,21 @@ import {
   isAllowedEmail,
   type BrowserWindowInput
 } from '@live-tab-mirror/shared';
-import { extensionEnv, isSupabaseConfigured } from './env';
+import { extensionEnv, isBackendConfigured } from './env';
 import { supabase } from './supabaseClient';
 import {
   DEFAULT_DEBOUNCE_MS,
   HEARTBEAT_PERIOD_MINUTES,
   TITLE_DEBOUNCE_MS
 } from './syncPolicy';
-import { clearSyncState, readSyncState, writeSyncState, type ExtensionSyncState } from './storage';
+import {
+  clearSyncState,
+  readSyncState,
+  readWorkerSession,
+  writeSyncState,
+  type ExtensionSyncState
+} from './storage';
+import { signOutWorker, upsertWorkerSnapshot } from './workerClient';
 
 const HEARTBEAT_ALARM = 'live-tab-mirror-heartbeat';
 
@@ -55,6 +62,83 @@ async function recordFailure(reason: string, message: string): Promise<Extension
   });
 }
 
+async function buildCurrentSnapshot() {
+  return createSnapshotFromWindows(await getNormalWindows(), {
+    deviceId: extensionEnv.deviceId,
+    deviceName: extensionEnv.deviceName,
+    browser: 'Chrome'
+  });
+}
+
+async function syncToWorker(reason: string, lastAttemptAt: string): Promise<ExtensionSyncState> {
+  const session = await readWorkerSession();
+
+  if (!session) {
+    return recordFailure(reason, '扩展还没有登录。');
+  }
+
+  if (!isAllowedEmail(session.email)) {
+    await signOutWorker();
+    return recordFailure(reason, '当前账号不在允许列表中。');
+  }
+
+  const snapshot = await buildCurrentSnapshot();
+  await upsertWorkerSnapshot(snapshot);
+
+  return writeSyncState({
+    lastAttemptAt,
+    lastSyncAt: snapshot.syncedAt,
+    lastError: null,
+    tabCount: countTabs(snapshot),
+    windowCount: snapshot.windows.length,
+    reason
+  });
+}
+
+async function syncToSupabase(reason: string, lastAttemptAt: string): Promise<ExtensionSyncState> {
+  const { data, error: sessionError } = await supabase.auth.getSession();
+  const user = data.session?.user;
+
+  if (sessionError) {
+    return recordFailure(reason, sessionError.message);
+  }
+
+  if (!user) {
+    return recordFailure(reason, '扩展还没有登录。');
+  }
+
+  if (!isAllowedEmail(user.email ?? '')) {
+    await supabase.auth.signOut();
+    return recordFailure(reason, '当前账号不在允许列表中。');
+  }
+
+  const snapshot = await buildCurrentSnapshot();
+  const { error } = await supabase.from('desktop_tab_snapshots').upsert(
+    {
+      user_id: user.id,
+      device_id: snapshot.device.deviceId,
+      device_name: snapshot.device.deviceName,
+      snapshot,
+      synced_at: snapshot.syncedAt,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: 'user_id,device_id' }
+  );
+
+  if (error) {
+    return recordFailure(reason, error.message);
+  }
+
+  return writeSyncState({
+    lastAttemptAt,
+    lastSyncAt: snapshot.syncedAt,
+    lastError: null,
+    tabCount: countTabs(snapshot),
+    windowCount: snapshot.windows.length,
+    reason
+  });
+}
+
 export async function syncNow(reason = 'manual'): Promise<ExtensionSyncState> {
   if (syncing) {
     return readSyncState();
@@ -64,56 +148,13 @@ export async function syncNow(reason = 'manual'): Promise<ExtensionSyncState> {
   const lastAttemptAt = new Date().toISOString();
 
   try {
-    if (!isSupabaseConfigured()) {
-      return await recordFailure(reason, '请先配置 Supabase URL 和 publishable key。');
+    if (!isBackendConfigured()) {
+      return await recordFailure(reason, '请先配置当前后端需要的环境变量。');
     }
 
-    const { data, error: sessionError } = await supabase.auth.getSession();
-    const user = data.session?.user;
-
-    if (sessionError) {
-      return await recordFailure(reason, sessionError.message);
-    }
-
-    if (!user) {
-      return await recordFailure(reason, '扩展还没有登录。');
-    }
-
-    if (!isAllowedEmail(user.email ?? '')) {
-      await supabase.auth.signOut();
-      return await recordFailure(reason, '当前账号不在允许列表中。');
-    }
-
-    const snapshot = createSnapshotFromWindows(await getNormalWindows(), {
-      deviceId: extensionEnv.deviceId,
-      deviceName: extensionEnv.deviceName,
-      browser: 'Chrome'
-    });
-
-    const { error } = await supabase.from('desktop_tab_snapshots').upsert(
-      {
-        user_id: user.id,
-        device_id: snapshot.device.deviceId,
-        device_name: snapshot.device.deviceName,
-        snapshot,
-        synced_at: snapshot.syncedAt,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'user_id,device_id' }
-    );
-
-    if (error) {
-      return await recordFailure(reason, error.message);
-    }
-
-    return writeSyncState({
-      lastAttemptAt,
-      lastSyncAt: snapshot.syncedAt,
-      lastError: null,
-      tabCount: countTabs(snapshot),
-      windowCount: snapshot.windows.length,
-      reason
-    });
+    return extensionEnv.backendProvider === 'worker'
+      ? await syncToWorker(reason, lastAttemptAt)
+      : await syncToSupabase(reason, lastAttemptAt);
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步失败。';
     return recordFailure(reason, message);

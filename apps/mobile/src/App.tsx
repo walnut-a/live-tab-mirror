@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
 import {
   ALLOWED_EMAIL,
+  type BackendUser,
   countTabs,
   describeFreshness,
   filterSnapshot,
@@ -10,6 +10,7 @@ import {
   hasOpenableUrl,
   isAllowedEmail,
   normalizeEmail,
+  type SnapshotRecord,
   type TabSnapshot
 } from '@live-tab-mirror/shared';
 import {
@@ -20,45 +21,56 @@ import {
   RefreshCw,
   Search
 } from 'lucide-react';
-import { isSupabaseConfigured, mobileEnv } from './env';
+import { isBackendConfigured, mobileEnv } from './env';
 import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
 import { supabase } from './supabaseClient';
+import {
+  fetchLatestWorkerSnapshot,
+  getWorkerUser,
+  signOutWorker,
+  verifyWorkerCode
+} from './workerBackend';
 
-interface SnapshotRow {
-  device_id: string;
-  device_name: string;
-  snapshot: TabSnapshot;
-  synced_at: string;
-  updated_at: string;
+async function fetchLatestSnapshot(): Promise<SnapshotRecord | null> {
+  if (mobileEnv.backendProvider === 'worker') {
+    return fetchLatestWorkerSnapshot();
+  }
+
+  const { data, error } = await supabase
+    .from('desktop_tab_snapshots')
+    .select('device_id,device_name,snapshot,synced_at,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as SnapshotRecord | null) ?? null;
 }
 
-function useSnapshotPolling(user: User | null) {
-  const [row, setRow] = useState<SnapshotRow | null>(null);
+function useSnapshotPolling(user: BackendUser | null) {
+  const [row, setRow] = useState<SnapshotRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!user || !isSupabaseConfigured()) {
+    if (!user || !isBackendConfigured()) {
       return;
     }
 
     setLoading(true);
-    const { data, error: fetchError } = await supabase
-      .from('desktop_tab_snapshots')
-      .select('device_id,device_name,snapshot,synced_at,updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
 
-    setLoading(false);
-
-    if (fetchError) {
-      setError(fetchError.message);
-      return;
+    try {
+      const data = await fetchLatestSnapshot();
+      setError(null);
+      setRow(data);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : '刷新失败。');
+    } finally {
+      setLoading(false);
     }
-
-    setError(null);
-    setRow((data as SnapshotRow | null) ?? null);
   }, [user]);
 
   useEffect(() => {
@@ -94,7 +106,7 @@ function useSnapshotPolling(user: User | null) {
 }
 
 export function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<BackendUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState(ALLOWED_EMAIL);
   const [token, setToken] = useState('');
@@ -112,23 +124,29 @@ export function App() {
     () => describeFreshness(snapshot?.syncedAt ?? row?.synced_at ?? null),
     [row?.synced_at, snapshot?.syncedAt]
   );
-  const supabaseConfigured = isSupabaseConfigured();
+  const backendConfigured = isBackendConfigured();
   const otpLoginView = getOtpLoginViewState({
     busy: authBusy,
-    configured: supabaseConfigured,
+    configured: backendConfigured,
     token
   });
 
   useEffect(() => {
+    if (mobileEnv.backendProvider === 'worker') {
+      setUser(getWorkerUser());
+      setAuthLoading(false);
+      return undefined;
+    }
+
     void supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+      setUser(data.user?.email ? { email: data.user.email } : null);
       setAuthLoading(false);
     });
 
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      setUser(session?.user?.email ? { email: session.user.email } : null);
       setAuthLoading(false);
     });
 
@@ -146,25 +164,39 @@ export function App() {
       return;
     }
 
-    const { data, error: verifyError } = await supabase.auth.verifyOtp({
-      email: normalizedEmail,
-      token: token.trim(),
-      type: 'email'
-    });
+    try {
+      const nextUser =
+        mobileEnv.backendProvider === 'worker'
+          ? await verifyWorkerCode(normalizedEmail, token.trim())
+          : await supabase.auth
+              .verifyOtp({
+                email: normalizedEmail,
+                token: token.trim(),
+                type: 'email'
+              })
+              .then(({ data, error: verifyError }) => {
+                if (verifyError) {
+                  throw verifyError;
+                }
+                return data.user?.email ? { email: data.user.email } : null;
+              });
 
-    setAuthBusy(false);
-
-    if (verifyError) {
-      setAuthError(verifyError.message);
-      return;
+      setUser(nextUser);
+      await refresh();
+    } catch (verifyError) {
+      setAuthError(verifyError instanceof Error ? verifyError.message : '登录失败。');
+    } finally {
+      setAuthBusy(false);
     }
-
-    setUser(data.user);
-    await refresh();
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    if (mobileEnv.backendProvider === 'worker') {
+      await signOutWorker();
+    } else {
+      await supabase.auth.signOut();
+    }
+
     setUser(null);
     setToken('');
     setQuery('');
@@ -185,10 +217,9 @@ export function App() {
           <h1>Live Tabs</h1>
           <p>输入本机脚本生成的验证码后查看电脑 Chrome 当前标签页。</p>
 
-          {!supabaseConfigured ? (
+          {!backendConfigured ? (
             <div className="notice error">
-              请先配置 <code>VITE_SUPABASE_URL</code> 和{' '}
-              <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>。
+              请先配置当前后端需要的环境变量。
             </div>
           ) : null}
 

@@ -121,3 +121,65 @@ export function filterSnapshot(snapshot: TabSnapshot, query: string): TabSnapsho
 export function countTabs(snapshot: TabSnapshot | null): number {
   return snapshot?.windows.reduce((total, window) => total + window.tabs.length, 0) ?? 0;
 }
+
+function isSnapshotTab(value: unknown): value is SnapshotTab {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const tab = value as Partial<SnapshotTab>;
+  return (
+    (typeof tab.id === 'number' || tab.id === null) &&
+    typeof tab.index === 'number' &&
+    typeof tab.title === 'string' &&
+    typeof tab.url === 'string' &&
+    hasOpenableUrl(tab.url) &&
+    (typeof tab.favIconUrl === 'string' || tab.favIconUrl === null) &&
+    typeof tab.active === 'boolean' &&
+    typeof tab.pinned === 'boolean' &&
+    typeof tab.audible === 'boolean' &&
+    typeof tab.groupId === 'number' &&
+    typeof tab.domain === 'string'
+  );
+}
+
+function isSnapshotWindow(value: unknown): value is SnapshotWindow {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const window = value as Partial<SnapshotWindow>;
+  return (
+    (typeof window.windowId === 'number' || window.windowId === null) &&
+    typeof window.focused === 'boolean' &&
+    window.incognito === false &&
+    Array.isArray(window.tabs) &&
+    window.tabs.every(isSnapshotTab)
+  );
+}
+
+export function isTabSnapshot(value: unknown): value is TabSnapshot {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const snapshot = value as Partial<TabSnapshot>;
+  return (
+    snapshot.schemaVersion === SNAPSHOT_SCHEMA_VERSION &&
+    typeof snapshot.syncedAt === 'string' &&
+    typeof snapshot.device?.deviceId === 'string' &&
+    typeof snapshot.device.deviceName === 'string' &&
+    typeof snapshot.device.browser === 'string' &&
+    Array.isArray(snapshot.windows) &&
+    snapshot.windows.every(isSnapshotWindow)
+  );
+}
+
+export async function createSnapshotHash(snapshot: TabSnapshot): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify(snapshot))
+  );
+
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}

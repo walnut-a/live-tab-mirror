@@ -3,15 +3,16 @@ import { createRoot } from 'react-dom/client';
 import { CheckCircle2, Loader2, LogOut, RefreshCw } from 'lucide-react';
 import {
   ALLOWED_EMAIL,
+  type BackendUser,
   describeFreshness,
   getOtpLoginViewState,
   isAllowedEmail,
   normalizeEmail
 } from '@live-tab-mirror/shared';
-import type { User } from '@supabase/supabase-js';
-import { extensionEnv, isSupabaseConfigured } from './env';
+import { extensionEnv, isBackendConfigured } from './env';
 import { supabase } from './supabaseClient';
 import { type ExtensionSyncState } from './storage';
+import { getWorkerUser, signOutWorker, verifyWorkerCode } from './workerClient';
 import './popup.css';
 
 interface MessageResponse {
@@ -26,7 +27,7 @@ function sendExtensionMessage(type: string): Promise<MessageResponse> {
 function PopupApp() {
   const [email, setEmail] = useState(ALLOWED_EMAIL);
   const [token, setToken] = useState('');
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<BackendUser | null>(null);
   const [syncState, setSyncState] = useState<ExtensionSyncState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -36,10 +37,10 @@ function PopupApp() {
     () => describeFreshness(syncState?.lastSyncAt ?? null),
     [syncState?.lastSyncAt]
   );
-  const supabaseConfigured = isSupabaseConfigured();
+  const backendConfigured = isBackendConfigured();
   const otpLoginView = getOtpLoginViewState({
     busy,
-    configured: supabaseConfigured,
+    configured: backendConfigured,
     token
   });
 
@@ -50,8 +51,13 @@ function PopupApp() {
 
   useEffect(() => {
     void (async () => {
+      if (extensionEnv.backendProvider === 'worker') {
+        setUser(await getWorkerUser());
+        return;
+      }
+
       const { data } = await supabase.auth.getUser();
-      setUser(data.user);
+      setUser(data.user?.email ? { email: data.user.email } : null);
     })();
 
     void refreshStatus();
@@ -60,15 +66,16 @@ function PopupApp() {
       void refreshStatus();
     }, 2500);
 
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    const subscription =
+      extensionEnv.backendProvider === 'supabase'
+        ? supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user?.email ? { email: session.user.email } : null);
+          }).data.subscription
+        : null;
 
     return () => {
       window.clearInterval(interval);
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, []);
 
@@ -84,24 +91,33 @@ function PopupApp() {
       return;
     }
 
-    const { data, error: verifyError } = await supabase.auth.verifyOtp({
-      email: normalizedEmail,
-      token: token.trim(),
-      type: 'email'
-    });
+    try {
+      const nextUser =
+        extensionEnv.backendProvider === 'worker'
+          ? await verifyWorkerCode(normalizedEmail, token.trim())
+          : await supabase.auth
+              .verifyOtp({
+                email: normalizedEmail,
+                token: token.trim(),
+                type: 'email'
+              })
+              .then(({ data, error: verifyError }) => {
+                if (verifyError) {
+                  throw verifyError;
+                }
+                return data.user?.email ? { email: data.user.email } : null;
+              });
 
-    if (verifyError) {
+      setUser(nextUser);
+      setToken('');
+      setMessage('登录成功，正在同步当前标签页。');
+      const response = await sendExtensionMessage('syncNow');
+      setSyncState(response.state);
+    } catch (verifyError) {
+      setError(verifyError instanceof Error ? verifyError.message : '登录失败。');
+    } finally {
       setBusy(false);
-      setError(verifyError.message);
-      return;
     }
-
-    setUser(data.user);
-    setToken('');
-    setMessage('登录成功，正在同步当前标签页。');
-    const response = await sendExtensionMessage('syncNow');
-    setSyncState(response.state);
-    setBusy(false);
   }
 
   async function syncManually() {
@@ -120,7 +136,12 @@ function PopupApp() {
 
   async function signOut() {
     setBusy(true);
-    await supabase.auth.signOut();
+    if (extensionEnv.backendProvider === 'worker') {
+      await signOutWorker();
+    } else {
+      await supabase.auth.signOut();
+    }
+
     const response = await sendExtensionMessage('clearStatus');
     setSyncState(response.state);
     setUser(null);
@@ -138,10 +159,9 @@ function PopupApp() {
         {busy ? <Loader2 className="spin" size={18} /> : <CheckCircle2 size={18} />}
       </header>
 
-      {!supabaseConfigured ? (
+      {!backendConfigured ? (
         <section className="notice error">
-          请先在扩展构建环境里配置 <code>VITE_SUPABASE_URL</code> 和{' '}
-          <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>。
+          请先在扩展构建环境里配置当前后端需要的环境变量。
         </section>
       ) : null}
 
