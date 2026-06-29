@@ -7,14 +7,15 @@
 
 短期先不拆 Supabase 数据层，只把登录改成“本机脚本生成验证码”。这一步成本最低，也能立刻绕开 Supabase 内置邮件的发送限流。
 
-长期推荐迁移到 Cloudflare Workers + D1：
+长期迁移已选定 Cloudflare Workers + D1。用户已经有不少小网站挂在 Cloudflare，并且已经开了 Workers 基础套餐，所以这个工具的边际现金成本接近 0；重点是不要再使用 KV，避免叠加已有账号的 KV 用量压力。
 
 - GitHub Pages 继续放 PWA 静态资源。
 - Cloudflare Worker 提供登录、上传 snapshot、读取 snapshot 的 API。
 - D1 保存当前 snapshot、一次性登录码、session，不保存历史。
+- 不使用 Cloudflare KV 存 snapshot、验证码或 session。
 - 扩展和 PWA 不再接触 Supabase URL、publishable key，也不再依赖 Supabase Auth。
 
-Cloudflare 当前官方文档显示 Workers Free 有 100,000 requests/day，D1 Free 有 5 million rows read/day、100,000 rows written/day、5 GB storage。这个个人工具的访问量大概率长期在免费额度内；即使以后需要升级，Workers Paid 是 account 级最低 $5/month，比为了这个小工具单独新开一个 Supabase 付费项目更合适。
+Cloudflare 当前官方文档显示 Workers Free 有 100,000 requests/day，D1 Free 有 5 million rows read/day、100,000 rows written/day、5 GB storage。这个个人工具的访问量大概率长期在免费额度内；既然账号已经开了 Workers 基础套餐，Worker 请求和 D1 用量更不会成为这个工具的主要成本。需要避开的反而是 KV，因为 KV 写入额度和计费模型不适合频繁覆盖当前状态。
 
 参考：
 
@@ -145,7 +146,10 @@ create table desktop_tab_snapshots (
 - CORS 只允许 GitHub Pages 域名和已知 Chrome extension origin。
 - 即使 CORS 配错，也必须靠 Bearer token 做真正鉴权。
 - `PUT /snapshot/:deviceId` 校验 snapshot schema version 和基本 payload 大小。
+- `PUT /snapshot/:deviceId` 比对 `snapshot_hash`，payload 没变化时直接返回，不写 D1。
+- 扩展端保留事件 debounce，并增加最小上传间隔，避免异常循环造成请求风暴。
 - 不新增历史表，不新增审计流水表。
+- 不使用 KV。当前 snapshot、验证码和 session 都放 D1。
 
 ## 迁移步骤
 
@@ -252,9 +256,13 @@ VITE_WORKER_API_URL=https://live-tab-mirror-api.<account>.workers.dev
 
 成本最低，改动最小。适合作为当前过渡方案。缺点是只要这个项目需要付费，就没有解决固定成本问题。
 
-### 小 VPS + SQLite
+### 自有服务器 + SQLite
 
-实现很直观，一个 Node/Fastify 或 Go 服务加 SQLite 就够。缺点是要自己维护机器、TLS、备份和系统更新。对这个工具来说运维感偏重。
+实现很直观，一个 Node/Fastify 或 Go 服务加 SQLite 就够。如果已有服务器，现金成本同样接近 0。缺点是要自己维护进程、日志、TLS、系统更新和故障恢复；既然 Cloudflare 基础套餐已经存在，当前把它作为备选而不是首选。
+
+### Cloudflare KV
+
+不建议。这个工具的写入模型是“频繁覆盖当前 snapshot”，KV 的写入额度和计费模型都不适合；用户账号此前也已经遇到过 KV 用量提醒。迁移实现里应明确禁止把 snapshot、验证码或 session 放进 KV。
 
 ### GitHub Gist 或私有仓库存 snapshot
 
@@ -262,4 +270,4 @@ VITE_WORKER_API_URL=https://live-tab-mirror-api.<account>.workers.dev
 
 ## 推荐执行顺序
 
-先按当前脚本模式跑 1 到 2 天，确认登录、同步、PWA 都顺畅。之后再开始 `apps/api` 的 Worker + D1 实现。不要在没验证手动验证码流程之前就拆 Supabase，否则会同时面对登录、数据、部署三条链路的变量。
+先按当前脚本模式跑 1 到 2 天，确认登录、同步、PWA 都顺畅。之后开始 `apps/api` 的 Worker + D1 实现。不要在没验证手动验证码流程之前就拆 Supabase，否则会同时面对登录、数据、部署三条链路的变量。
