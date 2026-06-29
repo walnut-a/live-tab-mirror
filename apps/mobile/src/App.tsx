@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { isBackendConfigured, mobileEnv } from './env';
 import { SNAPSHOT_POLL_INTERVAL_MS } from './polling';
-import { supabase } from './supabaseClient';
 import {
   fetchWorkerDevices,
   fetchLatestWorkerSnapshot,
@@ -35,43 +34,15 @@ import {
 } from './workerBackend';
 
 async function fetchLatestSnapshot(deviceId?: string | null): Promise<SnapshotRecord | null> {
-  if (mobileEnv.backendProvider === 'worker') {
-    return fetchLatestWorkerSnapshot(deviceId);
-  }
-
-  let query = supabase
-    .from('desktop_tab_snapshots')
-    .select('device_id,device_name,snapshot,synced_at,updated_at')
-    .order('updated_at', { ascending: false })
-    .limit(1);
-
-  if (deviceId) {
-    query = query.eq('device_id', deviceId);
-  }
-
-  const { data, error } = await query.maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  return (data as SnapshotRecord | null) ?? null;
+  return fetchLatestWorkerSnapshot(deviceId);
 }
 
 async function fetchSnapshotHistory(deviceId?: string | null): Promise<SnapshotRecord | null> {
-  if (mobileEnv.backendProvider !== 'worker') {
-    return null;
-  }
-
   const data = await fetchWorkerSnapshotHistory(deviceId);
   return data.snapshot;
 }
 
 async function fetchSnapshotDevices(): Promise<SnapshotDeviceRecord[]> {
-  if (mobileEnv.backendProvider !== 'worker') {
-    return [];
-  }
-
   return fetchWorkerDevices();
 }
 
@@ -199,25 +170,8 @@ export function App() {
   });
 
   useEffect(() => {
-    if (mobileEnv.backendProvider === 'worker') {
-      setUser(getWorkerUser());
-      setAuthLoading(false);
-      return undefined;
-    }
-
-    void supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user?.email ? { email: data.user.email } : null);
-      setAuthLoading(false);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user?.email ? { email: session.user.email } : null);
-      setAuthLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setUser(getWorkerUser());
+    setAuthLoading(false);
   }, []);
 
   useEffect(() => {
@@ -238,22 +192,7 @@ export function App() {
     }
 
     try {
-      const nextUser =
-        mobileEnv.backendProvider === 'worker'
-          ? await verifyWorkerCode(normalizedEmail, token.trim())
-          : await supabase.auth
-              .verifyOtp({
-                email: normalizedEmail,
-                token: token.trim(),
-                type: 'email'
-              })
-              .then(({ data, error: verifyError }) => {
-                if (verifyError) {
-                  throw verifyError;
-                }
-                return data.user?.email ? { email: data.user.email } : null;
-              });
-
+      const nextUser = await verifyWorkerCode(normalizedEmail, token.trim());
       setUser(nextUser);
       await refresh();
     } catch (verifyError) {
@@ -264,12 +203,7 @@ export function App() {
   }
 
   async function signOut() {
-    if (mobileEnv.backendProvider === 'worker') {
-      await signOutWorker();
-    } else {
-      await supabase.auth.signOut();
-    }
-
+    await signOutWorker();
     setUser(null);
     setToken('');
     setQuery('');

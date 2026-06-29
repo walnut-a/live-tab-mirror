@@ -1,7 +1,5 @@
 import type { TabSnapshot } from './types';
 
-export type BackendProvider = 'supabase' | 'worker';
-
 export interface BackendUser {
   email: string;
 }
@@ -43,10 +41,6 @@ export interface SnapshotUpsertResult {
   snapshotHash?: string;
   syncedAt?: string;
   updatedAt?: string;
-}
-
-export function normalizeBackendProvider(value: string | undefined | null): BackendProvider {
-  return value === 'worker' ? 'worker' : 'supabase';
 }
 
 export function isWorkerSessionFresh(session: WorkerSession | null, now = new Date()): session is WorkerSession {

@@ -1,4 +1,3 @@
-import type { SupportedStorage } from '@supabase/supabase-js';
 import {
   DEFAULT_DEVICE_ID,
   DEFAULT_DEVICE_NAME,
@@ -55,19 +54,6 @@ function storageRemove(keys: string | string[]): Promise<void> {
     chrome.storage.local.remove(keys, () => resolve());
   });
 }
-
-export const chromeStorageAdapter: SupportedStorage = {
-  async getItem(key: string): Promise<string | null> {
-    const result = await storageGet(key);
-    return typeof result[key] === 'string' ? result[key] : null;
-  },
-  async setItem(key: string, value: string): Promise<void> {
-    await storageSet({ [key]: value });
-  },
-  async removeItem(key: string): Promise<void> {
-    await storageRemove(key);
-  }
-};
 
 export async function readSyncState(): Promise<ExtensionSyncState> {
   const result = await storageGet(SYNC_STATE_KEY);

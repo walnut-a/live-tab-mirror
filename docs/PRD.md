@@ -3,7 +3,9 @@
 版本：v1.0  
 日期：2026-06-28  
 目标用户：仅本人，邮箱 `zhaowork74@gmail.com`  
-产品形态：桌面 Chrome 扩展 + 手机网页/PWA + Supabase 后端，后续计划迁移到 Cloudflare Workers + D1
+产品形态：桌面 Chrome 扩展 + 手机网页/PWA + Cloudflare Worker + D1 后端
+
+> 状态说明：本文保留了第一版 Supabase 方案的部分历史决策记录。当前线上实现已经迁移到 Cloudflare Worker + D1，旧 Supabase 项目已删除，运行时不再依赖 Supabase Auth/Postgres/RLS。
 
 ## 1. 背景
 
@@ -60,10 +62,10 @@ Live Tab Mirror 是一个个人用的实时标签页镜像工具。
 ### 4.2 工程目标
 
 - Chrome 扩展负责采集和上传 tab snapshot。
-- Supabase 负责认证、数据库、RLS 权限。
+- Cloudflare Worker 负责认证、读写 API、历史合并和访问控制，D1 负责存储。
 - 手机网页负责展示和本地搜索。
-- 不使用 service role key 暴露到前端或扩展。
-- 后端不需要自建服务器，第一版不使用 Supabase Edge Functions。
+- 不把任何后端管理密钥暴露到前端或扩展。
+- 后端不需要自建服务器。
 - 第一版优先用轮询读取，Realtime 作为后续增强。
 
 ## 5. 非目标
@@ -705,12 +707,12 @@ OTP 比 Magic Link 更适合插件，但 Supabase 内置邮件额度太低，不
 
 ## 18. 实现备注
 
-### 18.1 Supabase Auth
+### 18.1 Worker Auth
 
-- 使用 Supabase Email OTP 校验机制，但验证码由本机脚本生成。
-- 登录时禁止自动创建非预期用户。
-- 仅使用 publishable key。
-- 管理用户创建时如果需要 service role，只在本地脚本或 Supabase Dashboard 使用，不能进入前端代码。
+- 使用本机脚本调用 Worker 管理接口生成一次性验证码。
+- Worker 只允许 `zhaowork74@gmail.com` 登录。
+- 前端和扩展只保存 Worker session token。
+- `ADMIN_CODE_SECRET` 和 `SESSION_SECRET` 只保存在本机 shell 或 Cloudflare Worker secrets 中，不能进入前端代码。
 
 ### 18.2 Chrome API
 
@@ -725,16 +727,14 @@ OTP 比 Magic Link 更适合插件，但 Supabase 内置邮件额度太低，不
 
 - Vercel
 - Netlify
-- Supabase Hosting 相关方案
-- GitHub Pages，若构建产物纯静态且 Supabase 配置来自环境变量
+- GitHub Pages
 
-个人版当前使用 GitHub Pages，后续迁移出 Supabase 时可继续保留静态部署。
+个人版当前使用 GitHub Pages，后端访问统一通过 Cloudflare Worker。
 
 ## 19. 参考资料
 
-- Supabase Auth Admin `generateLink`: https://supabase.com/docs/reference/javascript/auth-admin-generatelink
-- Supabase JS `verifyOtp`: https://supabase.com/docs/reference/javascript/auth-verifyotp
-- Supabase RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
+- Cloudflare Workers: https://developers.cloudflare.com/workers/
+- Cloudflare D1: https://developers.cloudflare.com/d1/
 - Chrome Tabs API: https://developer.chrome.com/docs/extensions/reference/api/tabs
 - Chrome Windows API: https://developer.chrome.com/docs/extensions/reference/api/windows
 - Chrome Storage API: https://developer.chrome.com/docs/extensions/reference/api/storage

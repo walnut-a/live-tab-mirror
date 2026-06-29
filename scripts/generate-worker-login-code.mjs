@@ -6,6 +6,8 @@ function printHelp() {
   console.log(`Live Tab Mirror Cloudflare Worker login code
 
 Usage:
+  npm run auth:code
+  npm run auth:code -- --json
   npm run auth:worker-code
   npm run auth:worker-code -- --json
 

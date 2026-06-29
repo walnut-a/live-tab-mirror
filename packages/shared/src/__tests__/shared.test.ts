@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALLOWED_EMAIL } from '../constants';
 import { getOtpLoginViewState, isAllowedEmail } from '../auth';
-import { isWorkerSessionFresh, normalizeBackendProvider } from '../backend';
+import { isWorkerSessionFresh } from '../backend';
 import {
   createSnapshotHistoryHash,
   createSnapshotHash,
@@ -53,12 +53,6 @@ describe('auth guards', () => {
 });
 
 describe('backend provider helpers', () => {
-  it('defaults to Supabase unless the worker provider is explicitly selected', () => {
-    expect(normalizeBackendProvider(undefined)).toBe('supabase');
-    expect(normalizeBackendProvider('supabase')).toBe('supabase');
-    expect(normalizeBackendProvider('worker')).toBe('worker');
-  });
-
   it('keeps expired worker sessions out of the app state', () => {
     expect(
       isWorkerSessionFresh(

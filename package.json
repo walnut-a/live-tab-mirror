@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "auth:code": "node scripts/generate-supabase-login-code.mjs",
+    "auth:code": "node scripts/generate-worker-login-code.mjs",
     "auth:worker-code": "node scripts/generate-worker-login-code.mjs",
     "build": "npm run build --workspaces --if-present",
     "dev:mobile": "npm run dev -w @live-tab-mirror/mobile",

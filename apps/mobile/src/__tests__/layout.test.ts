@@ -58,4 +58,16 @@ describe('mobile shell behavior', () => {
     expect(css).not.toContain('.freshness.old');
     expect(css).not.toContain('.freshness.unknown');
   });
+
+  it('keeps the mobile runtime on the Worker backend only', () => {
+    const appPath = resolve(import.meta.dirname, '../App.tsx');
+    const envPath = resolve(import.meta.dirname, '../env.ts');
+    const appSource = readFileSync(appPath, 'utf8');
+    const envSource = readFileSync(envPath, 'utf8');
+
+    expect(appSource).not.toContain('supabase');
+    expect(appSource).not.toContain('backendProvider');
+    expect(envSource).not.toContain('VITE_SUPABASE');
+    expect(envSource).not.toContain('backendProvider');
+  });
 });

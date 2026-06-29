@@ -5,7 +5,6 @@ import {
   type BrowserWindowInput
 } from '@live-tab-mirror/shared';
 import { extensionEnv, isBackendConfigured } from './env';
-import { supabase } from './supabaseClient';
 import {
   DEFAULT_DEBOUNCE_MS,
   HEARTBEAT_PERIOD_MINUTES,
@@ -101,50 +100,6 @@ async function syncToWorker(reason: string, lastAttemptAt: string): Promise<Exte
   });
 }
 
-async function syncToSupabase(reason: string, lastAttemptAt: string): Promise<ExtensionSyncState> {
-  const { data, error: sessionError } = await supabase.auth.getSession();
-  const user = data.session?.user;
-
-  if (sessionError) {
-    return recordFailure(reason, sessionError.message);
-  }
-
-  if (!user) {
-    return recordFailure(reason, '扩展还没有登录。');
-  }
-
-  if (!isAllowedEmail(user.email ?? '')) {
-    await supabase.auth.signOut();
-    return recordFailure(reason, '当前账号不在允许列表中。');
-  }
-
-  const snapshot = await buildCurrentSnapshot();
-  const { error } = await supabase.from('desktop_tab_snapshots').upsert(
-    {
-      user_id: user.id,
-      device_id: snapshot.device.deviceId,
-      device_name: snapshot.device.deviceName,
-      snapshot,
-      synced_at: snapshot.syncedAt,
-      updated_at: new Date().toISOString()
-    },
-    { onConflict: 'user_id,device_id' }
-  );
-
-  if (error) {
-    return recordFailure(reason, error.message);
-  }
-
-  return writeSyncState({
-    lastAttemptAt,
-    lastSyncAt: snapshot.syncedAt,
-    lastError: null,
-    tabCount: countTabs(snapshot),
-    windowCount: snapshot.windows.length,
-    reason
-  });
-}
-
 export async function syncNow(reason = 'manual'): Promise<ExtensionSyncState> {
   if (syncing) {
     return readSyncState();
@@ -158,9 +113,7 @@ export async function syncNow(reason = 'manual'): Promise<ExtensionSyncState> {
       return await recordFailure(reason, '请先配置当前后端需要的环境变量。');
     }
 
-    return extensionEnv.backendProvider === 'worker'
-      ? await syncToWorker(reason, lastAttemptAt)
-      : await syncToSupabase(reason, lastAttemptAt);
+    return await syncToWorker(reason, lastAttemptAt);
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步失败。';
     return recordFailure(reason, message);

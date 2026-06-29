@@ -10,7 +10,6 @@ import {
   normalizeEmail
 } from '@live-tab-mirror/shared';
 import { extensionEnv, isBackendConfigured } from './env';
-import { supabase } from './supabaseClient';
 import {
   type ExtensionDeviceConfig,
   type ExtensionSyncState,
@@ -64,14 +63,7 @@ function PopupApp() {
       });
       setDeviceConfig(nextDeviceConfig);
       setDeviceNameDraft(nextDeviceConfig.deviceName);
-
-      if (extensionEnv.backendProvider === 'worker') {
-        setUser(await getWorkerUser());
-        return;
-      }
-
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user?.email ? { email: data.user.email } : null);
+      setUser(await getWorkerUser());
     })();
 
     void refreshStatus();
@@ -80,16 +72,8 @@ function PopupApp() {
       void refreshStatus();
     }, 2500);
 
-    const subscription =
-      extensionEnv.backendProvider === 'supabase'
-        ? supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user?.email ? { email: session.user.email } : null);
-          }).data.subscription
-        : null;
-
     return () => {
       window.clearInterval(interval);
-      subscription?.unsubscribe();
     };
   }, []);
 
@@ -106,22 +90,7 @@ function PopupApp() {
     }
 
     try {
-      const nextUser =
-        extensionEnv.backendProvider === 'worker'
-          ? await verifyWorkerCode(normalizedEmail, token.trim())
-          : await supabase.auth
-              .verifyOtp({
-                email: normalizedEmail,
-                token: token.trim(),
-                type: 'email'
-              })
-              .then(({ data, error: verifyError }) => {
-                if (verifyError) {
-                  throw verifyError;
-                }
-                return data.user?.email ? { email: data.user.email } : null;
-              });
-
+      const nextUser = await verifyWorkerCode(normalizedEmail, token.trim());
       setUser(nextUser);
       setToken('');
       setMessage('登录成功，正在同步当前标签页。');
@@ -164,12 +133,7 @@ function PopupApp() {
 
   async function signOut() {
     setBusy(true);
-    if (extensionEnv.backendProvider === 'worker') {
-      await signOutWorker();
-    } else {
-      await supabase.auth.signOut();
-    }
-
+    await signOutWorker();
     const response = await sendExtensionMessage('clearStatus');
     setSyncState(response.state);
     setUser(null);
