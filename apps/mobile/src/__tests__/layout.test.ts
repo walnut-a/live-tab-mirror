@@ -43,4 +43,19 @@ describe('mobile shell behavior', () => {
     expect(css).toMatch(/\.device-list\s*{[\s\S]*overflow-x:\s*auto/);
     expect(css).toMatch(/\.device-chip\s*{[\s\S]*flex:\s*0 0 auto/);
   });
+
+  it('shows when the current snapshot was synced without stale warning copy', () => {
+    const appPath = resolve(import.meta.dirname, '../App.tsx');
+    const stylesPath = resolve(import.meta.dirname, '../styles.css');
+    const appSource = readFileSync(appPath, 'utf8');
+    const css = readFileSync(stylesPath, 'utf8');
+
+    expect(appSource).toContain('formatSnapshotSourceLabel');
+    expect(appSource).toContain('同步于');
+    expect(appSource).not.toContain('describeFreshness');
+    expect(appSource).not.toContain('freshness.state');
+    expect(css).not.toContain('.freshness.stale');
+    expect(css).not.toContain('.freshness.old');
+    expect(css).not.toContain('.freshness.unknown');
+  });
 });

@@ -136,15 +136,6 @@ input:focus {
   font-size: 14px;
 }
 
-.freshness.stale {
-  color: #9a5d13;
-}
-
-.freshness.old,
-.freshness.unknown {
-  color: #9b2525;
-}
-
 .top-actions {
   display: flex;
   gap: 8px;

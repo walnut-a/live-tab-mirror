@@ -3,7 +3,6 @@ import {
   ALLOWED_EMAIL,
   type BackendUser,
   countTabs,
-  describeFreshness,
   filterSnapshot,
   getDomain,
   getOtpLoginViewState,
@@ -76,7 +75,7 @@ async function fetchSnapshotDevices(): Promise<SnapshotDeviceRecord[]> {
   return fetchWorkerDevices();
 }
 
-function formatSnapshotTime(value?: string): string {
+function formatSnapshotTime(value?: string | null): string {
   if (!value) {
     return '未知时间';
   }
@@ -92,6 +91,15 @@ function formatSnapshotTime(value?: string): string {
     hour: '2-digit',
     minute: '2-digit'
   }).format(date);
+}
+
+function formatSnapshotSourceLabel(value?: string | null): string {
+  if (!value) {
+    return '等待同步';
+  }
+
+  const formattedTime = formatSnapshotTime(value);
+  return formattedTime === '未知时间' ? '同步时间未知' : `同步于 ${formattedTime}`;
 }
 
 function useSnapshotPolling(user: BackendUser | null, selectedDeviceId: string | null) {
@@ -182,10 +190,7 @@ export function App() {
     () => (historySnapshot ? filterSnapshot(historySnapshot, query) : null),
     [historySnapshot, query]
   );
-  const freshness = useMemo(
-    () => describeFreshness(snapshot?.syncedAt ?? activeRow?.synced_at ?? null),
-    [activeRow?.synced_at, snapshot?.syncedAt]
-  );
+  const snapshotSourceLabel = formatSnapshotSourceLabel(snapshot?.syncedAt ?? activeRow?.synced_at ?? null);
   const backendConfigured = isBackendConfigured();
   const otpLoginView = getOtpLoginViewState({
     busy: authBusy,
@@ -321,7 +326,7 @@ export function App() {
       <header className="topbar">
         <div>
           <h1>Live Tabs</h1>
-          <p className={`freshness ${freshness.state}`}>{freshness.label}</p>
+          <p className="freshness">{snapshotSourceLabel}</p>
         </div>
         <div className="top-actions">
           <button type="button" className="icon-button" onClick={() => void refresh()} aria-label="刷新">
