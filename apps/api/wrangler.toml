@@ -1,11 +1,13 @@
 name = "live-tab-mirror-api"
 main = "src/index.ts"
 compatibility_date = "2026-06-29"
+workers_dev = true
+preview_urls = false
 
 [[d1_databases]]
 binding = "DB"
 database_name = "live-tab-mirror"
-database_id = "replace-with-cloudflare-d1-database-id"
+database_id = "8fa30e68-f2ac-470a-a721-1bc1f6b9890d"
 migrations_dir = "migrations"
 
 [vars]

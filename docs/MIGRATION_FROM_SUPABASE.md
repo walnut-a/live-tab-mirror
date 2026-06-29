@@ -211,7 +211,7 @@ type BackendProvider = "supabase" | "worker";
 
 ```text
 VITE_BACKEND_PROVIDER=supabase | worker
-VITE_WORKER_API_URL=https://live-tab-mirror-api.<account>.workers.dev
+VITE_WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
 ```
 
 ### 3. 部署并验证 Worker

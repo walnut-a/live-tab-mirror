@@ -72,7 +72,7 @@ VITE_ALLOWED_EMAIL=zhaowork74@gmail.com
 
 ```bash
 VITE_BACKEND_PROVIDER=worker
-VITE_WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
+VITE_WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
 VITE_ALLOWED_EMAIL=zhaowork74@gmail.com
 ```
 
@@ -143,7 +143,7 @@ Worker 后端在 `apps/api`，只用 D1，不用 KV。
 6. 生成 Worker 登录验证码：
 
    ```bash
-   export WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
+   export WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
    export WORKER_ADMIN_CODE_SECRET=your_admin_code_secret
    npm run auth:worker-code
    ```
@@ -152,7 +152,7 @@ Worker 后端在 `apps/api`，只用 D1，不用 KV。
 
    ```bash
    VITE_BACKEND_PROVIDER=worker
-   VITE_WORKER_API_URL=https://live-tab-mirror-api.your-subdomain.workers.dev
+   VITE_WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
    ```
 
 如果 Worker 使用自定义域名，Chrome 扩展的 `apps/extension/public/manifest.json` 还需要把该域名加入 `host_permissions`。默认已经包含 `https://*.workers.dev/*`。
