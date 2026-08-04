@@ -2,6 +2,7 @@ import { ALLOWED_EMAIL, normalizeEmail } from '@live-tab-mirror/shared';
 import type { Env } from './types';
 
 const textEncoder = new TextEncoder();
+const NON_EXPIRING_SESSION_ISO = '9999-12-31T23:59:59.999Z';
 
 export function getAllowedEmail(env: Env): string {
   return normalizeEmail(env.ALLOWED_EMAIL || ALLOWED_EMAIL);
@@ -64,10 +65,30 @@ export async function adminSecretMatches(env: Env, value: string | null): Promis
   return expected === actual;
 }
 
+export async function loginPasswordMatches(env: Env, value: string): Promise<boolean> {
+  if (!env.LOGIN_PASSWORD || !value) {
+    return false;
+  }
+
+  const [expected, actual] = await Promise.all([
+    sha256Hex(env.LOGIN_PASSWORD),
+    sha256Hex(value)
+  ]);
+  return expected === actual;
+}
+
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+export function getSessionExpirationIso(value: string | undefined, createdAt = new Date()): string {
+  if (value?.trim().toLowerCase() === 'never') {
+    return NON_EXPIRING_SESSION_ISO;
+  }
+
+  return addDays(createdAt, readPositiveInteger(value, 30)).toISOString();
 }

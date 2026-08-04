@@ -5,7 +5,7 @@ import {
   ALLOWED_EMAIL,
   type BackendUser,
   describeFreshness,
-  getOtpLoginViewState,
+  getPasswordLoginViewState,
   isAllowedEmail,
   normalizeEmail
 } from '@live-tab-mirror/shared';
@@ -16,7 +16,7 @@ import {
   readDeviceConfig,
   writeDeviceConfig
 } from './storage';
-import { getWorkerUser, signOutWorker, verifyWorkerCode } from './workerClient';
+import { getWorkerUser, signInWorker, signOutWorker } from './workerClient';
 import './popup.css';
 
 interface MessageResponse {
@@ -30,7 +30,7 @@ function sendExtensionMessage(type: string): Promise<MessageResponse> {
 
 function PopupApp() {
   const [email, setEmail] = useState(ALLOWED_EMAIL);
-  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
   const [user, setUser] = useState<BackendUser | null>(null);
   const [syncState, setSyncState] = useState<ExtensionSyncState | null>(null);
   const [deviceConfig, setDeviceConfig] = useState<ExtensionDeviceConfig | null>(null);
@@ -44,10 +44,10 @@ function PopupApp() {
     [syncState?.lastSyncAt]
   );
   const backendConfigured = isBackendConfigured();
-  const otpLoginView = getOtpLoginViewState({
+  const passwordLoginView = getPasswordLoginViewState({
     busy,
     configured: backendConfigured,
-    token
+    password
   });
 
   async function refreshStatus() {
@@ -77,7 +77,7 @@ function PopupApp() {
     };
   }, []);
 
-  async function verifyOtp() {
+  async function signIn() {
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -90,9 +90,9 @@ function PopupApp() {
     }
 
     try {
-      const nextUser = await verifyWorkerCode(normalizedEmail, token.trim());
+      const nextUser = await signInWorker(normalizedEmail, password.trim());
       setUser(nextUser);
-      setToken('');
+      setPassword('');
       setMessage('登录成功，正在同步当前标签页。');
       const response = await sendExtensionMessage('syncNow');
       setSyncState(response.state);
@@ -137,7 +137,7 @@ function PopupApp() {
     const response = await sendExtensionMessage('clearStatus');
     setSyncState(response.state);
     setUser(null);
-    setToken('');
+    setPassword('');
     setBusy(false);
   }
 
@@ -220,7 +220,7 @@ function PopupApp() {
         </section>
       ) : (
         <section className="stack">
-          <p className="auth-note">输入本机脚本生成的验证码。</p>
+          <p className="auth-note">网页和插件使用同一个固定登录密码。</p>
 
           <label>
             邮箱
@@ -228,15 +228,15 @@ function PopupApp() {
           </label>
 
           <label>
-            验证码
+            登录密码
             <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </label>
-          <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
+          <button type="button" onClick={signIn} disabled={passwordLoginView.verifyButtonDisabled}>
             <CheckCircle2 size={15} />
             登录并同步
           </button>

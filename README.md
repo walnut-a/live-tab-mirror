@@ -21,7 +21,7 @@ packages/shared     两端共用的类型、邮箱限制、snapshot、搜索、�
 
 - Worker API: `https://live-tab-mirror-api.zhaowork74.workers.dev`
 - D1 数据库：`live-tab-mirror`
-- 登录方式：本机脚本手动生成一次性验证码，不发邮件。
+- 登录方式：固定高强度密码，不发邮件；同一个密码可重复登录网页和多个浏览器插件。
 - 数据范围：保存每台桌面设备的最新 snapshot，并合并展示最近 48 小时内出现过的历史链接。
 
 旧 Supabase 项目已经删除，代码里不再保留 Supabase 运行路径。
@@ -56,9 +56,11 @@ VITE_DEVICE_NAME=Mac Chrome
 
 扩展首次运行时会自动生成安装级 `deviceId`，保存在 `chrome.storage.local`。因此同一份扩展装到不同电脑或不同浏览器配置里，也会作为不同设备同步，不需要为每台设备重新构建。`VITE_DEVICE_ID` 仍可作为高级覆盖项使用，但默认不建议配置。
 
-## 生成登录验证码
+## 登录密码与应急验证码
 
-登录码由 Worker 管理接口生成，不依赖邮件服务：
+日常登录使用 Cloudflare Worker secret `LOGIN_PASSWORD` 中保存的固定密码。网页和插件可以反复使用同一个密码，每次登录都会签发独立 session。
+
+原有的一次性验证码保留为应急入口，不依赖邮件服务：
 
 ```bash
 export WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
@@ -66,7 +68,7 @@ export WORKER_ADMIN_CODE_SECRET=your_admin_code_secret
 npm run auth:code
 ```
 
-脚本会输出 `zhaowork74@gmail.com` 的一次性验证码。打开扩展或手机网页，把这个验证码填进“验证码”输入框即可。验证码有效期由 Worker 的 `LOGIN_CODE_TTL_MINUTES` 控制，当前默认 20 分钟。
+脚本会输出 `zhaowork74@gmail.com` 的一次性验证码。验证码有效期由 Worker 的 `LOGIN_CODE_TTL_MINUTES` 控制，当前默认 20 分钟，并且只能使用一次；日常多端登录不要使用它。
 
 ## 准备 Cloudflare Worker + D1
 
@@ -85,11 +87,12 @@ Worker 后端在 `apps/api`，只用 D1，不用 KV。D1 保存最新 snapshot�
    ```bash
    npx wrangler secret put SESSION_SECRET
    npx wrangler secret put ADMIN_CODE_SECRET
+   npx wrangler secret put LOGIN_PASSWORD
    ```
 
-   `SESSION_SECRET` 用于 hash 登录码和 session token；`ADMIN_CODE_SECRET` 用于保护手动生成验证码接口。不要把它们写进前端 env。
+   `SESSION_SECRET` 用于 hash 登录码和 session token；`ADMIN_CODE_SECRET` 用于保护手动生成验证码接口；`LOGIN_PASSWORD` 是网页和插件共用的固定高强度登录密码。不要把它们写进前端 env。
 
-   `apps/api/wrangler.toml` 里的 `SNAPSHOT_HISTORY_RETENTION_HOURS` 控制历史保留窗口，当前默认是 48 小时。
+   `apps/api/wrangler.toml` 里的 `SNAPSHOT_HISTORY_RETENTION_HOURS` 控制历史保留窗口，当前默认是 48 小时。`SESSION_TTL_DAYS` 控制新 session 的有效期；数字表示天数，`never` 表示不自动过期（服务端使用 `9999-12-31` 作为哨兵）。不自动过期的 session 仍可通过退出登录撤销，但 Token 泄露后会持续有效，除非主动撤销或轮换 `SESSION_SECRET`。
 
 4. 应用 D1 migration：
 
@@ -103,13 +106,7 @@ Worker 后端在 `apps/api`，只用 D1，不用 KV。D1 保存最新 snapshot�
    npm run deploy -w @live-tab-mirror/api
    ```
 
-6. 生成登录验证码：
-
-   ```bash
-   export WORKER_API_URL=https://live-tab-mirror-api.zhaowork74.workers.dev
-   export WORKER_ADMIN_CODE_SECRET=your_admin_code_secret
-   npm run auth:code
-   ```
+6. 在网页或插件中输入 `LOGIN_PASSWORD` 对应的固定密码登录。
 
 如果 Worker 使用自定义域名，Chrome 扩展的 `apps/extension/public/manifest.json` 还需要把该域名加入 `host_permissions`。默认已经包含 `https://*.workers.dev/*`。
 
@@ -131,7 +128,7 @@ chrome://extensions
 apps/extension/dist
 ```
 
-扩展 popup 里用 `zhaowork74@gmail.com` 和本机脚本生成的验证码登录，成功后会立即同步一次。这里走 Worker 一次性验证码，不走注册逻辑，也不发送邮件。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。popup 中可以修改设备名称，下一次同步会把新名称带到手机端。
+扩展 popup 里用 `zhaowork74@gmail.com` 和固定登录密码登录，成功后会立即同步一次。同一个密码可用于多个浏览器配置，不走注册逻辑，也不发送邮件。之后打开、关闭、移动、切换标签页会 debounce 后上传；扩展也会每 10 分钟 heartbeat 一次作为兜底。popup 中可以修改设备名称，下一次同步会把新名称带到手机端。
 
 ## 运行手机网页/PWA
 
@@ -141,7 +138,7 @@ apps/extension/dist
 https://walnut-a.github.io/live-tab-mirror/
 ```
 
-网页登录同样只允许 `zhaowork74@gmail.com`。先在本机运行 `npm run auth:code`，再把生成的验证码填进手机网页即可。
+网页登录同样只允许 `zhaowork74@gmail.com`，使用与插件相同的固定登录密码。
 
 手机上建议把网页安装成 PWA 使用：在 Android Chrome 打开上面的地址，点浏览器菜单里的“添加到主屏幕”或“安装应用”，之后从主屏幕图标打开。这样会按 `standalone` 模式运行，不再是普通 Chrome 标签页，也就不会在上下滑动时反复显示/隐藏 Chrome 工具栏。
 
@@ -195,6 +192,7 @@ npm run build
 ## 安全边界
 
 - 前端和扩展只使用 Worker API URL 和用户 session token。
+- 固定登录密码只保存在 Cloudflare Worker secret 中，不写入仓库或前端 bundle。
 - 代码里不要放 service_role key、数据库密码或 Dashboard 凭据。
 - 扩展只请求 `tabs`、`storage`、`alarms` 和 `workers.dev` host permission。
 - snapshot 默认过滤 `chrome://`、`file://` 等不可打开或本地敏感 URL。

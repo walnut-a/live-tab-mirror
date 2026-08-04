@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALLOWED_EMAIL } from '../constants';
-import { getOtpLoginViewState, isAllowedEmail } from '../auth';
+import { getPasswordLoginViewState, isAllowedEmail } from '../auth';
 import { isWorkerSessionFresh } from '../backend';
 import {
   createSnapshotHistoryHash,
@@ -19,32 +19,42 @@ describe('auth guards', () => {
     expect(isAllowedEmail('someone@example.com')).toBe(false);
   });
 
-  it('keeps manual OTP verification disabled until the code is long enough', () => {
+  it('keeps password login disabled until the password is long enough', () => {
     expect(
-      getOtpLoginViewState({
+      getPasswordLoginViewState({
         busy: false,
         configured: true,
-        token: ''
+        password: ''
       })
     ).toMatchObject({
       verifyButtonDisabled: true
     });
 
     expect(
-      getOtpLoginViewState({
+      getPasswordLoginViewState({
         busy: false,
         configured: true,
-        token: '123456'
+        password: 'short'
+      })
+    ).toMatchObject({
+      verifyButtonDisabled: true
+    });
+
+    expect(
+      getPasswordLoginViewState({
+        busy: false,
+        configured: true,
+        password: 'long-password'
       })
     ).toMatchObject({
       verifyButtonDisabled: false
     });
 
     expect(
-      getOtpLoginViewState({
+      getPasswordLoginViewState({
         busy: false,
         configured: false,
-        token: '123456'
+        password: 'long-password'
       })
     ).toMatchObject({
       verifyButtonDisabled: true

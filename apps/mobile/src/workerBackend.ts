@@ -74,12 +74,12 @@ export function getWorkerUser(): BackendUser | null {
   return session ? { email: session.email } : null;
 }
 
-export async function verifyWorkerCode(email: string, code: string): Promise<BackendUser> {
+export async function signInWorker(email: string, password: string): Promise<BackendUser> {
   const session = await workerFetch<WorkerSession>('/auth/verify', {
     method: 'POST',
     body: JSON.stringify({
       email: normalizeEmail(email),
-      code
+      password
     })
   });
 

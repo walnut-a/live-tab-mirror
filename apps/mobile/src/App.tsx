@@ -5,7 +5,7 @@ import {
   countTabs,
   filterSnapshot,
   getDomain,
-  getOtpLoginViewState,
+  getPasswordLoginViewState,
   hasOpenableUrl,
   isAllowedEmail,
   normalizeEmail,
@@ -30,7 +30,7 @@ import {
   fetchWorkerSnapshotHistory,
   getWorkerUser,
   signOutWorker,
-  verifyWorkerCode
+  signInWorker
 } from './workerBackend';
 
 async function fetchLatestSnapshot(deviceId?: string | null): Promise<SnapshotRecord | null> {
@@ -143,7 +143,7 @@ export function App() {
   const [user, setUser] = useState<BackendUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState(ALLOWED_EMAIL);
-  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -163,10 +163,10 @@ export function App() {
   );
   const snapshotSourceLabel = formatSnapshotSourceLabel(snapshot?.syncedAt ?? activeRow?.synced_at ?? null);
   const backendConfigured = isBackendConfigured();
-  const otpLoginView = getOtpLoginViewState({
+  const passwordLoginView = getPasswordLoginViewState({
     busy: authBusy,
     configured: backendConfigured,
-    token
+    password
   });
 
   useEffect(() => {
@@ -180,7 +180,7 @@ export function App() {
     }
   }, [devices, selectedDeviceId]);
 
-  async function verifyOtp() {
+  async function signIn() {
     setAuthBusy(true);
     setAuthError(null);
 
@@ -192,7 +192,7 @@ export function App() {
     }
 
     try {
-      const nextUser = await verifyWorkerCode(normalizedEmail, token.trim());
+      const nextUser = await signInWorker(normalizedEmail, password.trim());
       setUser(nextUser);
       await refresh();
     } catch (verifyError) {
@@ -205,7 +205,7 @@ export function App() {
   async function signOut() {
     await signOutWorker();
     setUser(null);
-    setToken('');
+    setPassword('');
     setQuery('');
     setSelectedDeviceId(null);
   }
@@ -223,7 +223,7 @@ export function App() {
       <main className="login-screen">
         <section className="login-panel">
           <h1>Live Tabs</h1>
-          <p>输入本机脚本生成的验证码后查看电脑 Chrome 当前标签页。</p>
+          <p>输入固定登录密码后查看电脑 Chrome 当前标签页。</p>
 
           {!backendConfigured ? (
             <div className="notice error">
@@ -237,15 +237,15 @@ export function App() {
           </label>
 
           <label>
-            验证码
+            登录密码
             <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </label>
-          <button type="button" onClick={verifyOtp} disabled={otpLoginView.verifyButtonDisabled}>
+          <button type="button" onClick={signIn} disabled={passwordLoginView.verifyButtonDisabled}>
             登录
           </button>
 

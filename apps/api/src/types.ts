@@ -3,6 +3,7 @@ import type { TabSnapshot } from '@live-tab-mirror/shared';
 export interface Env {
   DB: D1Database;
   ADMIN_CODE_SECRET: string;
+  LOGIN_PASSWORD?: string;
   SESSION_SECRET: string;
   ALLOWED_EMAIL?: string;
   ALLOWED_ORIGINS?: string;

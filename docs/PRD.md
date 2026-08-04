@@ -688,13 +688,13 @@ Manifest V3 service worker 可能被 Chrome 挂起。应对方式：
 - title/favicon 更新使用更长 debounce。
 - 无变化时不上传完整 snapshot。
 
-### 17.3 邮件 OTP 体验麻烦
+### 17.3 多端重复登录
 
-OTP 比 Magic Link 更适合插件，但 Supabase 内置邮件额度太低，不适合反复测试。应对方式：
+一次性验证码不能在网页和多个插件之间复用。应对方式：
 
-- 用本机脚本生成验证码，不走邮件发送。
-- session 尽量长期保存。
-- 登录失效时才重新验证。
+- 日常使用保存在 Worker secret 中的固定高强度密码，不走邮件发送。
+- 同一个密码允许重复登录，每个客户端分别签发可撤销的 session。
+- session 不自动过期，退出登录时主动撤销；一次性验证码只保留为应急入口。
 
 ### 17.4 敏感 URL 泄露
 
@@ -709,10 +709,11 @@ OTP 比 Magic Link 更适合插件，但 Supabase 内置邮件额度太低，不
 
 ### 18.1 Worker Auth
 
-- 使用本机脚本调用 Worker 管理接口生成一次性验证码。
+- 日常登录使用 Cloudflare Worker secret `LOGIN_PASSWORD` 中的固定高强度密码。
+- 本机脚本生成的一次性验证码只作为应急登录入口。
 - Worker 只允许 `zhaowork74@gmail.com` 登录。
 - 前端和扩展只保存 Worker session token。
-- `ADMIN_CODE_SECRET` 和 `SESSION_SECRET` 只保存在本机 shell 或 Cloudflare Worker secrets 中，不能进入前端代码。
+- `LOGIN_PASSWORD`、`ADMIN_CODE_SECRET` 和 `SESSION_SECRET` 只保存在 Cloudflare Worker secrets 或受控本机环境中，不能进入前端代码。
 
 ### 18.2 Chrome API
 

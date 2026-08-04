@@ -16,13 +16,14 @@ import {
   snapshotRowToBody
 } from './history';
 import {
-  addDays,
   addMinutes,
   adminSecretMatches,
   assertAllowedEmail,
   generateLoginCode,
   generateToken,
+  getSessionExpirationIso,
   hashWithSecret,
+  loginPasswordMatches,
   readPositiveInteger
 } from './security';
 import type {
@@ -39,6 +40,7 @@ import type {
 interface VerifyBody {
   email?: string;
   code?: string;
+  password?: string;
   deviceLabel?: string;
 }
 
@@ -108,10 +110,48 @@ async function createLoginCode(request: Request, env: Env): Promise<Response> {
   });
 }
 
-async function verifyLoginCode(request: Request, env: Env): Promise<Response> {
+async function prepareSession(
+  env: Env,
+  email: string,
+  deviceLabel: string | null,
+  createdAt: Date
+): Promise<{ expiresAt: string; insert: D1PreparedStatement; token: string }> {
+  const token = generateToken();
+  const tokenHash = await hashWithSecret(token, env.SESSION_SECRET);
+  const sessionId = crypto.randomUUID();
+  const expiresAt = getSessionExpirationIso(env.SESSION_TTL_DAYS, createdAt);
+  const insert = env.DB.prepare(
+    `insert into sessions (id, email, token_hash, device_label, expires_at, revoked_at, created_at)
+     values (?1, ?2, ?3, ?4, ?5, null, ?6)`
+  ).bind(sessionId, email, tokenHash, deviceLabel, expiresAt, nowIso(createdAt));
+
+  return { expiresAt, insert, token };
+}
+
+async function verifyLogin(request: Request, env: Env): Promise<Response> {
   const body = await readJson<VerifyBody>(request, 16 * 1024);
   const email = assertAllowedEmail(env, body.email || '');
-  const code = String(body.code ?? '').trim();
+  const legacyCredential = String(body.code ?? '').trim();
+  const password = String(body.password ?? legacyCredential).trim();
+  const usesPassword = body.password !== undefined || !/^\d{6,12}$/.test(legacyCredential);
+
+  if (usesPassword) {
+    const validLength = password.length >= 12 && password.length <= 256;
+    if (!validLength || !(await loginPasswordMatches(env, password))) {
+      return errorResponse(request, env, 401, 'Invalid email or password.');
+    }
+
+    const createdAt = new Date();
+    const session = await prepareSession(env, email, body.deviceLabel ?? null, createdAt);
+    await session.insert.run();
+    return jsonResponse(request, env, {
+      email,
+      token: session.token,
+      expiresAt: session.expiresAt
+    });
+  }
+
+  const code = legacyCredential;
 
   if (!/^\d{6,12}$/.test(code)) {
     return errorResponse(request, env, 400, 'Invalid code.');
@@ -131,26 +171,20 @@ async function verifyLoginCode(request: Request, env: Env): Promise<Response> {
   }
 
   const createdAt = new Date();
-  const token = generateToken();
-  const tokenHash = await hashWithSecret(token, env.SESSION_SECRET);
-  const sessionId = crypto.randomUUID();
-  const expiresAt = addDays(createdAt, readPositiveInteger(env.SESSION_TTL_DAYS, 30));
+  const session = await prepareSession(env, email, body.deviceLabel ?? null, createdAt);
 
   await env.DB.batch([
     env.DB.prepare('update login_codes set used_at = ?1 where id = ?2 and used_at is null').bind(
       nowIso(createdAt),
       codeRow.id
     ),
-    env.DB.prepare(
-      `insert into sessions (id, email, token_hash, device_label, expires_at, revoked_at, created_at)
-       values (?1, ?2, ?3, ?4, ?5, null, ?6)`
-    ).bind(sessionId, email, tokenHash, body.deviceLabel ?? null, nowIso(expiresAt), nowIso(createdAt))
+    session.insert
   ]);
 
   return jsonResponse(request, env, {
     email,
-    token,
-    expiresAt: nowIso(expiresAt)
+    token: session.token,
+    expiresAt: session.expiresAt
   });
 }
 
@@ -352,7 +386,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 
   if (request.method === 'POST' && url.pathname === '/auth/verify') {
-    return verifyLoginCode(request, env);
+    return verifyLogin(request, env);
   }
 
   if (request.method === 'POST' && url.pathname === '/auth/logout') {
