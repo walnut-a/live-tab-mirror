@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CheckCircle2, Loader2, LogOut, RefreshCw } from 'lucide-react';
+import { BookmarkPlus, CheckCircle2, Loader2, LogOut, RefreshCw } from 'lucide-react';
 import {
   ALLOWED_EMAIL,
   type BackendUser,
@@ -16,7 +16,8 @@ import {
   readDeviceConfig,
   writeDeviceConfig
 } from './storage';
-import { getWorkerUser, signInWorker, signOutWorker } from './workerClient';
+import { toInboxCapture } from './inboxCapture';
+import { captureWorkerInboxItem, getWorkerUser, signInWorker, signOutWorker } from './workerClient';
 import './popup.css';
 
 interface MessageResponse {
@@ -131,6 +132,24 @@ function PopupApp() {
     setMessage('设备名称已保存。');
   }
 
+  async function saveCurrentTabToInbox() {
+    if (!deviceConfig) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const capture = tab ? toInboxCapture(tab, deviceConfig.deviceId) : null;
+      if (!capture) throw new Error('当前页面不是可保存的 HTTP / HTTPS 网页。');
+      await captureWorkerInboxItem(capture);
+      setMessage('已加入 Glade Inbox。');
+    } catch (captureError) {
+      setError(captureError instanceof Error ? captureError.message : '未能加入 Inbox。');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     setBusy(true);
     await signOutWorker();
@@ -206,6 +225,11 @@ function PopupApp() {
               保存名称
             </button>
           </section>
+
+          <button type="button" onClick={saveCurrentTabToInbox} disabled={busy || !deviceConfig}>
+            <BookmarkPlus size={15} />
+            将当前页加入 Glade Inbox
+          </button>
 
           <div className="actions">
             <button type="button" onClick={syncManually} disabled={busy}>

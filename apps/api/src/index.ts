@@ -6,6 +6,7 @@ import {
   normalizeEmail
 } from '@live-tab-mirror/shared';
 import { readSnapshotDeviceFilter } from './devices';
+import { captureInboxItem, pullInboxChanges, pushInboxChanges } from './inboxApi';
 import { errorResponse, jsonResponse, optionsResponse, readJson } from './http';
 import {
   cleanupSnapshotHistory,
@@ -403,6 +404,18 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   if (request.method === 'GET' && url.pathname === '/snapshots/history') {
     return snapshotHistory(request, env);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/inbox/items') {
+    return captureInboxItem(request, env, await requireSession(request, env));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/inbox/changes') {
+    return pullInboxChanges(request, env, await requireSession(request, env));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/inbox/push') {
+    return pushInboxChanges(request, env, await requireSession(request, env));
   }
 
   const snapshotMatch = url.pathname.match(/^\/snapshot\/([^/]+)$/);

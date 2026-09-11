@@ -5,7 +5,7 @@
 目标用户：仅本人，邮箱 `zhaowork74@gmail.com`  
 产品形态：桌面 Chrome 扩展 + 手机网页/PWA + Cloudflare Worker + D1 后端
 
-> 状态说明：本文保留了第一版 Supabase 方案的部分历史决策记录。当前线上实现已经迁移到 Cloudflare Worker + D1，旧 Supabase 项目已删除，运行时不再依赖 Supabase Auth/Postgres/RLS。
+> 状态说明：本文保留了第一版 Supabase 方案的部分历史决策记录。当前线上实现已经迁移到 Cloudflare Worker + D1，旧 Supabase 项目已删除，运行时不再依赖 Supabase Auth/Postgres/RLS。2026-09-12 起新增独立 Inbox API，但不改变标签镜像的产品边界：只有用户明确点击保存的单页才进入 Inbox。
 
 ## 1. 背景
 

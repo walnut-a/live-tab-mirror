@@ -61,3 +61,18 @@ export interface SnapshotUpsertBody {
   snapshot?: TabSnapshot;
   snapshotHash?: string;
 }
+
+export interface InboxItemRow {
+  email: string;
+  id: string;
+  dedupe_key: string;
+  item_json: string;
+  changed_at: number;
+  updated_at: string;
+}
+
+export interface InboxChangeRow {
+  sequence: number;
+  revision: number;
+  item_json: string;
+}

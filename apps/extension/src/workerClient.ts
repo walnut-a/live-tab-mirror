@@ -2,6 +2,8 @@ import {
   createSnapshotHash,
   normalizeEmail,
   type BackendUser,
+  type InboxCaptureInput,
+  type InboxSyncItem,
   type SnapshotUpsertResult,
   type TabSnapshot,
   type WorkerSession
@@ -84,4 +86,12 @@ export async function upsertWorkerSnapshot(snapshot: TabSnapshot): Promise<Snaps
       })
     }
   );
+}
+
+export async function captureWorkerInboxItem(input: InboxCaptureInput): Promise<InboxSyncItem> {
+  const response = await workerFetch<{ item: InboxSyncItem }>('/inbox/items', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+  return response.item;
 }
