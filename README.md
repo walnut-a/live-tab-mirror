@@ -8,6 +8,8 @@
 
 需求文档见 [docs/PRD.md](docs/PRD.md)。
 
+当前线上部署与电脑端同步验证见 [2026-09-13 云端链路记录](docs/validation/cloud-sync-2026-09-13.md)。
+
 ## 目录结构
 
 ```text
