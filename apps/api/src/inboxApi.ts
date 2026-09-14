@@ -1,5 +1,6 @@
 import {
   isInboxSyncItem,
+  isTabSnapshot,
   normalizeInboxUrl,
   type InboxCaptureInput,
   type InboxChangesResponse,
@@ -8,7 +9,15 @@ import {
   type InboxSyncItem
 } from '@live-tab-mirror/shared';
 import { errorResponse, jsonResponse, readJson } from './http';
-import { chooseInboxWinner, mergeInboxCapture, readInboxCursor, readInboxLimit } from './inbox';
+import { getSnapshotHistoryCutoffIso } from './history';
+import {
+  chooseInboxWinner,
+  createSnapshotInboxItem,
+  mergeInboxCapture,
+  readInboxCursor,
+  readInboxLimit,
+  snapshotTabsToInboxSeeds
+} from './inbox';
 import type { AuthenticatedSession, Env, InboxChangeRow, InboxItemRow } from './types';
 
 function nowIso(): string {
@@ -23,6 +32,64 @@ function parseStoredItem(row: InboxItemRow | null): InboxSyncItem | null {
   } catch {
     return null;
   }
+}
+
+function parseSnapshots(rows: Array<{ snapshot_json: string }>): import('@live-tab-mirror/shared').TabSnapshot[] {
+  return rows.flatMap((row) => {
+    try {
+      const snapshot = JSON.parse(row.snapshot_json);
+      return isTabSnapshot(snapshot) ? [snapshot] : [];
+    } catch {
+      return [];
+    }
+  }).sort((left, right) => right.syncedAt.localeCompare(left.syncedAt));
+}
+
+export async function syncSnapshotTabsIntoInbox(env: Env, email: string): Promise<number> {
+  const [latestRows, historyRows, existingRows] = await Promise.all([
+    env.DB.prepare(
+      `select snapshot_json from desktop_tab_snapshots
+       where email = ?1 order by updated_at desc`
+    ).bind(email).all<{ snapshot_json: string }>(),
+    env.DB.prepare(
+      `select snapshot_json from desktop_tab_snapshot_history
+       where email = ?1 and updated_at >= ?2
+       order by updated_at desc limit 200`
+    ).bind(email, getSnapshotHistoryCutoffIso(env)).all<{ snapshot_json: string }>(),
+    env.DB.prepare('select dedupe_key from inbox_items where email = ?1')
+      .bind(email).all<{ dedupe_key: string }>()
+  ]);
+  const existingDedupeKeys = new Set(existingRows.results.map((row) => row.dedupe_key));
+  const seeds = snapshotTabsToInboxSeeds(
+    parseSnapshots([...latestRows.results, ...historyRows.results]),
+    existingDedupeKeys
+  );
+  const baseRevision = Date.now();
+
+  for (let offset = 0; offset < seeds.length; offset += 40) {
+    const statements = seeds.slice(offset, offset + 40).flatMap((seed, index) => {
+      const item = createSnapshotInboxItem(seed, crypto.randomUUID(), baseRevision + offset + index);
+      const itemJson = JSON.stringify(item);
+      const changedAt = nowIso();
+      return [
+        env.DB.prepare(
+          `insert into inbox_items (email, id, dedupe_key, item_json, changed_at, updated_at)
+           values (?1, ?2, ?3, ?4, ?5, ?6)
+           on conflict do nothing`
+        ).bind(email, item.id, item.dedupeKey, itemJson, item.changedAt, changedAt),
+        env.DB.prepare(
+          `insert into inbox_changes (email, item_id, revision, item_json, changed_at)
+           select ?1, ?2, ?3, ?4, ?5
+           where exists (
+             select 1 from inbox_items where email = ?1 and id = ?2
+           )`
+        ).bind(email, item.id, item.changedAt, itemJson, changedAt)
+      ];
+    });
+    await env.DB.batch(statements);
+  }
+
+  return seeds.length;
 }
 
 async function findExisting(env: Env, email: string, item: InboxSyncItem): Promise<InboxSyncItem | null> {
@@ -88,6 +155,7 @@ export async function pullInboxChanges(
   env: Env,
   session: AuthenticatedSession
 ): Promise<Response> {
+  await syncSnapshotTabsIntoInbox(env, session.email);
   const url = new URL(request.url);
   const cursor = readInboxCursor(url.searchParams.get('cursor'));
   const limit = readInboxLimit(url.searchParams.get('limit'));

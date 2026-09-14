@@ -4,7 +4,7 @@
 
 它默认展示“当前 snapshot”，并合并展示最近 48 小时内出现过、但当前不一定还打开的历史链接。标签镜像本身仍然不是稍后读、收藏夹、长期浏览历史或知识库。
 
-仓库另提供一套独立的 Inbox 增量 API，供 Glade 的可选个人同步适配器使用。Chrome 扩展只会在用户点击“将当前页加入 Glade Inbox”时写入一条待读项目，不会把所有打开标签自动塞进 Inbox。移除这套适配器不会影响 Glade 的本地 Inbox。
+仓库另提供一套独立的 Inbox 增量 API，供 Glade 的可选个人同步适配器使用。桌面端上传的有效 HTTP/HTTPS 非固定标签会默认进入云端 Inbox，最近 48 小时内已有的快照历史会在下一次上传或 Inbox 拉取时补齐；固定标签不进入阅读队列，相同 URL 只写入一次，已归档或删除的项目不会因为标签仍然打开而自动恢复。移除这套适配器不会影响 Glade 的本地 Inbox。
 
 需求文档见 [docs/PRD.md](docs/PRD.md)。
 
@@ -76,7 +76,7 @@ npm run auth:code
 
 ## 准备 Cloudflare Worker + D1
 
-Worker 后端在 `apps/api`，只用 D1，不用 KV。D1 保存最新 snapshot、最近 48 小时内用于合并展示的 snapshot 历史、独立 Inbox 增量记录、一次性登录码和 session。
+Worker 后端在 `apps/api`，只用 D1，不用 KV。D1 保存最新 snapshot、最近 48 小时内用于合并展示和补齐 Inbox 的 snapshot 历史、独立 Inbox 增量记录、一次性登录码和 session。
 
 1. 创建 D1 数据库：
 

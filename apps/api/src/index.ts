@@ -6,7 +6,7 @@ import {
   normalizeEmail
 } from '@live-tab-mirror/shared';
 import { readSnapshotDeviceFilter } from './devices';
-import { captureInboxItem, pullInboxChanges, pushInboxChanges } from './inboxApi';
+import { captureInboxItem, pullInboxChanges, pushInboxChanges, syncSnapshotTabsIntoInbox } from './inboxApi';
 import { errorResponse, jsonResponse, optionsResponse, readJson } from './http';
 import {
   cleanupSnapshotHistory,
@@ -299,6 +299,7 @@ async function upsertSnapshot(request: Request, env: Env, deviceId: string): Pro
   ).bind(session.email, deviceId).first<{ snapshot_hash: string; updated_at: string }>();
 
   if (existing?.snapshot_hash === snapshotHash) {
+    await syncSnapshotTabsIntoInbox(env, session.email);
     return jsonResponse(request, env, {
       ok: true,
       unchanged: true,
@@ -361,6 +362,7 @@ async function upsertSnapshot(request: Request, env: Env, deviceId: string): Pro
   }
 
   await env.DB.batch(writes);
+  await syncSnapshotTabsIntoInbox(env, session.email);
 
   return jsonResponse(request, env, {
     ok: true,

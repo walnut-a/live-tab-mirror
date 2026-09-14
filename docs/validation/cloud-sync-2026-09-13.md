@@ -1,5 +1,7 @@
 # 云端标签页与 Inbox API Ready 记录
 
+> 后续变更：2026-09-14 已调整产品边界，标签快照和最近 48 小时历史中的有效 HTTP/HTTPS 链接改为默认进入云端 Inbox。下文“不会自动写入”的描述仅记录本次验证时的状态。
+
 > 日期：2026-09-13
 > 分支：`walnut/inbox-sync-api`
 > 范围：Cloudflare Worker、D1 migration、这台 Mac 的 Chrome 扩展标签页同步
